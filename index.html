@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Persoonlijke App Store</title>
+<meta name="description" content="Mijn persoonlijke app store — zelfgebouwde apps, rechtstreeks op je telefoon.">
+<meta name="theme-color" content="#f2f2f7" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
+<link rel="icon" href='data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect width="100" height="100" rx="22" fill="%230a84ff"/><text x="50" y="68" font-size="52" text-anchor="middle" fill="white" font-family="-apple-system,sans-serif">A</text></svg>'>
+<style>
+  :root {
+    --bg: #f2f2f7;
+    --card: #ffffff;
+    --label: #000000;
+    --secondary-label: rgba(60, 60, 67, 0.6);
+    --tertiary-label: rgba(60, 60, 67, 0.3);
+    --separator: rgba(60, 60, 67, 0.29);
+    --accent: #007aff;
+    --fill: rgba(120, 120, 128, 0.16);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #000000;
+      --card: #1c1c1e;
+      --label: #ffffff;
+      --secondary-label: rgba(235, 235, 245, 0.6);
+      --tertiary-label: rgba(235, 235, 245, 0.3);
+      --separator: rgba(84, 84, 88, 0.6);
+      --accent: #0a84ff;
+      --fill: rgba(120, 120, 128, 0.32);
+    }
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, "Segoe UI", sans-serif;
+    background: var(--bg);
+    color: var(--label);
+    padding: max(env(safe-area-inset-top), 16px) 16px max(env(safe-area-inset-bottom), 32px);
+    max-width: 720px;
+    margin: 0 auto;
+    -webkit-font-smoothing: antialiased;
+  }
+  header { padding: 32px 4px 20px; }
+  .date {
+    font-size: 13px; font-weight: 600; letter-spacing: 0.4px;
+    text-transform: uppercase; color: var(--secondary-label);
+  }
+  h1 { font-size: 34px; font-weight: 700; letter-spacing: 0.37px; margin-top: 2px; }
+  .app-card {
+    display: flex; align-items: center; gap: 14px;
+    background: var(--card); border-radius: 16px;
+    padding: 14px; margin-bottom: 12px;
+    text-decoration: none; color: inherit;
+    transition: transform 0.12s ease;
+  }
+  .app-card:active { transform: scale(0.98); }
+  .app-icon {
+    width: 60px; height: 60px; border-radius: 14px; flex-shrink: 0;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.12);
+  }
+  .app-info { flex: 1; min-width: 0; }
+  .app-name { font-size: 17px; font-weight: 600; }
+  .app-subtitle {
+    font-size: 14px; color: var(--secondary-label); margin-top: 1px;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .open-btn {
+    background: var(--fill); color: var(--accent);
+    font-size: 15px; font-weight: 700;
+    border: none; border-radius: 999px; padding: 6px 18px;
+    flex-shrink: 0;
+  }
+  .section-title {
+    font-size: 20px; font-weight: 700; margin: 28px 4px 12px;
+  }
+  .howto {
+    background: var(--card); border-radius: 16px; padding: 18px 16px;
+    font-size: 15px; line-height: 1.45; color: var(--secondary-label);
+  }
+  .howto strong { color: var(--label); }
+  .howto ol { margin: 10px 0 0 20px; }
+  .howto li { margin-bottom: 8px; }
+  .howto li:last-child { margin-bottom: 0; }
+  footer {
+    text-align: center; font-size: 13px; color: var(--tertiary-label);
+    margin-top: 36px;
+  }
+</style>
+</head>
+<body>
+<header>
+  <div class="date" id="today"></div>
+  <h1>App Store</h1>
+</header>
+
+<main id="apps"></main>
+
+<h2 class="section-title">Nieuwe app toevoegen</h2>
+<div class="howto">
+  <strong>Zo werkt deze persoonlijke app store</strong> — geïnspireerd op
+  <a href="https://nav.al/code" style="color:var(--accent);text-decoration:none">Naval's “A Return to Code”</a>.
+  Elke app is een zelfstandige web-app in dit repository; er is geen server en je data blijft op je eigen apparaat.
+  <ol>
+    <li><strong>Vraag een AI-agent (Claude Code) een app te bouwen</strong> in een nieuwe map <code>apps/&lt;naam&gt;/</code> — één zelfstandig HTML-bestand, zonder externe afhankelijkheden.</li>
+    <li><strong>Voeg de app toe</strong> aan de lijst in <code>index.html</code> (het <code>APPS</code>-array onderaan).</li>
+    <li><strong>Publiceer</strong> via GitHub Pages en open deze pagina op je iPhone.</li>
+    <li><strong>Installeer:</strong> open een app → deel-knop → <em>“Zet op beginscherm”</em>. De app werkt daarna als een gewone app, ook offline.</li>
+  </ol>
+</div>
+
+<footer>Gebouwd met AI-agents · data blijft lokaal op je apparaat</footer>
+
+<script>
+const APPS = [
+  {
+    name: "Grip",
+    subtitle: "Persoonlijk financieel dashboard & plan",
+    href: "apps/finance/",
+    icon: "apps/finance/icons/icon-180.png",
+  },
+];
+
+const fmt = new Intl.DateTimeFormat("nl-NL", { weekday: "long", day: "numeric", month: "long" });
+document.getElementById("today").textContent = fmt.format(new Date());
+
+document.getElementById("apps").innerHTML = APPS.map(app => `
+  <a class="app-card" href="${app.href}">
+    <img class="app-icon" src="${app.icon}" alt="" width="60" height="60">
+    <div class="app-info">
+      <div class="app-name">${app.name}</div>
+      <div class="app-subtitle">${app.subtitle}</div>
+    </div>
+    <span class="open-btn">Openen</span>
+  </a>
+`).join("");
+</script>
+</body>
+</html>
