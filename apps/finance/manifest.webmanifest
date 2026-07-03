@@ -1,0 +1,15 @@
+{
+  "name": "Grip — Financieel dashboard",
+  "short_name": "Grip",
+  "description": "Persoonlijk financieel dashboard: inzicht in inkomsten, uitgaven en vaste lasten, plus een plan om financieel gezond te worden. Alle data blijft lokaal.",
+  "lang": "nl",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f2f2f7",
+  "theme_color": "#0a5fd0",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}
