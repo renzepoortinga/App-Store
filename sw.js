@@ -4,8 +4,8 @@
    - Overige bestanden: cache-first met update op de achtergrond.
    - Verzoeken onder /apps/ worden overgeslagen: elke app heeft een eigen
      service worker met een specifiekere scope. */
-const CACHE = "store-v3";
-const ASSETS = ["./", "./index.html", "./manifest.webmanifest", "./icons/store-180.png", "./icons/store-192.png", "./icons/store-512.png", "./apps/finance/icons/icon-180.png"];
+const CACHE = "store-v4";
+const ASSETS = ["./", "./index.html", "./installeren.html", "./manifest.webmanifest", "./icons/store-180.png", "./icons/store-192.png", "./icons/store-512.png", "./apps/finance/icons/icon-180.png"];
 
 self.addEventListener("install", e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(ASSETS)).then(() => self.skipWaiting()));

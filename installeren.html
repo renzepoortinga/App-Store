@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Apps installeren — zo doe je dat</title>
+<meta name="description" content="Stap-voor-stap met plaatjes: zo zet je een app uit onze App Store op je beginscherm, op iPhone en Android.">
+<link rel="icon" href="icons/store-192.png">
+<style>
+  :root {
+    --bg: #f2f2f7; --card: #ffffff; --label: #000; --secondary-label: rgba(60,60,67,.6);
+    --separator: rgba(60,60,67,.29); --accent: #007aff; --fill: rgba(120,120,128,.16);
+    --phone: #ffffff; --phone-frame: #d5d5da; --ui: #e8e8ed; --ui2: #f6f6f8; --ink: #3a3a3c;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #000; --card: #1c1c1e; --label: #fff; --secondary-label: rgba(235,235,245,.6);
+      --separator: rgba(84,84,88,.6); --accent: #0a84ff; --fill: rgba(120,120,128,.32);
+      --phone: #2c2c2e; --phone-frame: #48484c; --ui: #3a3a3c; --ui2: #242426; --ink: #d5d5da; }
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, system-ui, "Segoe UI", sans-serif;
+    background: var(--bg); color: var(--label); -webkit-font-smoothing: antialiased;
+    padding: max(env(safe-area-inset-top), 16px) 16px 48px; max-width: 680px; margin: 0 auto;
+  }
+  a { color: var(--accent); text-decoration: none; }
+  .back { display: inline-block; background: var(--fill); color: var(--accent); font-size: 15px; font-weight: 600; border-radius: 999px; padding: 8px 18px; margin-bottom: 8px; }
+  header { padding: 22px 0 14px; }
+  h1 { font-size: 30px; font-weight: 700; line-height: 1.15; }
+  .lead { font-size: 15px; color: var(--secondary-label); margin-top: 6px; line-height: 1.5; }
+
+  .seg {
+    display: flex; background: var(--fill); border-radius: 12px; padding: 3px; margin: 14px 0 22px;
+  }
+  .seg button {
+    flex: 1; font: inherit; font-size: 15px; font-weight: 600; border: none; cursor: pointer;
+    padding: 9px; border-radius: 9px; background: none; color: var(--secondary-label);
+  }
+  .seg button.on { background: var(--card); color: var(--label); box-shadow: 0 1px 4px rgba(0,0,0,.15); }
+
+  .platform { display: none; }
+  .platform.on { display: block; }
+  .step-card { background: var(--card); border-radius: 16px; padding: 16px; margin-bottom: 14px; display: flex; gap: 14px; align-items: center; }
+  .step-card svg { flex-shrink: 0; }
+  .step-card .txt { flex: 1; min-width: 0; }
+  .step-card .n {
+    display: inline-flex; width: 26px; height: 26px; border-radius: 13px; background: var(--accent);
+    color: #fff; font-size: 14px; font-weight: 700; align-items: center; justify-content: center; margin-bottom: 8px;
+  }
+  .step-card h3 { font-size: 17px; font-weight: 600; margin-bottom: 4px; }
+  .step-card p { font-size: 14px; color: var(--secondary-label); line-height: 1.5; }
+  .note { background: var(--card); border-radius: 14px; padding: 14px 16px; font-size: 14px; color: var(--secondary-label); line-height: 1.5; margin-top: 6px; }
+  .note b { color: var(--label); }
+  footer { text-align: center; font-size: 13px; color: var(--secondary-label); margin-top: 32px; }
+  @media (max-width: 430px) { .step-card { flex-direction: column; } .step-card svg { width: 150px; height: auto; } }
+
+  /* telefoon-illustraties */
+  .ph-frame { fill: var(--phone); stroke: var(--phone-frame); stroke-width: 3; }
+  .ph-ui { fill: var(--ui); }
+  .ph-ui2 { fill: var(--ui2); }
+  .ph-ink { fill: var(--ink); }
+  .ph-txt { fill: var(--ink); font-size: 9px; font-family: inherit; }
+  .ph-txt-b { fill: var(--label); font-size: 9.5px; font-weight: 600; font-family: inherit; }
+  .hl { stroke: var(--accent); stroke-width: 3; fill: none; }
+  .hl-fill { fill: var(--accent); }
+  .arrow { stroke: var(--accent); stroke-width: 3; fill: none; stroke-linecap: round; stroke-linejoin: round; }
+</style>
+</head>
+<body>
+<a class="back" href="./">‹ App Store</a>
+<header>
+  <h1>📲 Zo zet je een app op je telefoon</h1>
+  <p class="lead">Onze apps installeer je niet via Google Play of de Apple App Store, maar rechtstreeks
+  vanuit de browser — in drie tikken. Kies je telefoon:</p>
+</header>
+
+<div class="seg">
+  <button id="segIos" class="on">iPhone / iPad</button>
+  <button id="segAnd">Android</button>
+</div>
+
+<!-- ================= iPHONE ================= -->
+<div class="platform on" id="pfIos">
+  <div class="step-card">
+    <svg width="170" height="300" viewBox="0 0 170 300" aria-hidden="true">
+      <rect class="ph-frame" x="5" y="5" width="160" height="290" rx="22"/>
+      <rect class="ph-ui2" x="18" y="30" width="134" height="215" rx="6"/>
+      <rect class="ph-ui" x="30" y="45" width="110" height="10" rx="5"/>
+      <rect class="ph-ui" x="30" y="65" width="80" height="10" rx="5"/>
+      <rect class="ph-ui" x="30" y="95" width="110" height="60" rx="6"/>
+      <rect class="ph-ui" x="30" y="170" width="110" height="10" rx="5"/>
+      <!-- Safari onderbalk -->
+      <rect class="ph-ui" x="18" y="252" width="134" height="30" rx="8"/>
+      <path class="ph-ink" d="M42 274l-5-5h3v-6h4v6h3zM37 262h10v-1.5H37z" opacity=".55" transform="rotate(180 42 268)"/>
+      <!-- deelknop (midden) -->
+      <g>
+        <path class="hl-fill" d="M85 258v10M81.5 261l3.5-3.5 3.5 3.5" stroke="var(--accent)" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+        <rect x="79" y="264" width="12" height="9" rx="2" stroke="var(--accent)" stroke-width="2" fill="none"/>
+        <circle class="hl" cx="85" cy="266" r="13"/>
+      </g>
+      <path class="ph-ink" d="M118 260h8v8" opacity=".4"/>
+      <circle class="ph-ink" cx="128" cy="267" r="4" opacity=".4"/>
+      <path class="arrow" d="M85 230 v18 M80 242l5 6 5-6"/>
+    </svg>
+    <div class="txt">
+      <span class="n">1</span>
+      <h3>Open de app-pagina in Safari</h3>
+      <p>Tik onderaan het scherm op de <b>deelknop</b>: het vierkantje met de pijl omhoog, midden in de balk.
+      Zie je geen balk? Scrol dan even omhoog, dan verschijnt hij weer.</p>
+    </div>
+  </div>
+
+  <div class="step-card">
+    <svg width="170" height="300" viewBox="0 0 170 300" aria-hidden="true">
+      <rect class="ph-frame" x="5" y="5" width="160" height="290" rx="22"/>
+      <rect class="ph-ui2" x="18" y="120" width="134" height="162" rx="10"/>
+      <rect class="ph-ui" x="30" y="132" width="70" height="9" rx="4.5"/>
+      <rect class="ph-ui" x="30" y="152" width="110" height="1.5"/>
+      <text class="ph-txt" x="30" y="172">Kopieer</text>
+      <rect class="ph-ui" x="122" y="163" width="14" height="12" rx="2"/>
+      <text class="ph-txt" x="30" y="194">Voeg toe aan leeslijst</text>
+      <rect class="ph-ui" x="122" y="185" width="14" height="12" rx="2"/>
+      <text class="ph-txt" x="30" y="216">Voeg bladwijzer toe</text>
+      <rect class="ph-ui" x="122" y="207" width="14" height="12" rx="2"/>
+      <!-- gemarkeerde rij -->
+      <rect class="hl" x="24" y="228" width="122" height="24" rx="6"/>
+      <text class="ph-txt-b" x="30" y="243">Zet op beginscherm</text>
+      <rect x="122" y="231" width="14" height="14" rx="3" stroke="var(--accent)" stroke-width="1.8" fill="none"/>
+      <path d="M129 234.5v7M125.5 238h7" stroke="var(--accent)" stroke-width="1.8" stroke-linecap="round"/>
+      <text class="ph-txt" x="30" y="270">Markering</text>
+      <path class="arrow" d="M85 95 v16 M80 105l5 6 5-6"/>
+    </svg>
+    <div class="txt">
+      <span class="n">2</span>
+      <h3>Kies “Zet op beginscherm”</h3>
+      <p>Er schuift een menu omhoog. Scrol in dat menu een stukje naar beneden en tik op
+      <b>“Zet op beginscherm”</b> (met het ⊞-icoontje). Staat hij er niet bij? Tik dan onderaan op
+      “Wijzig acties” en zet hem aan.</p>
+    </div>
+  </div>
+
+  <div class="step-card">
+    <svg width="170" height="300" viewBox="0 0 170 300" aria-hidden="true">
+      <rect class="ph-frame" x="5" y="5" width="160" height="290" rx="22"/>
+      <text class="ph-txt" x="26" y="45">Annuleer</text>
+      <text class="ph-txt-b" x="62" y="45">Zet op beginscherm</text>
+      <!-- Voeg toe knop -->
+      <rect class="hl" x="112" y="32" width="40" height="19" rx="5"/>
+      <text x="118" y="45" fill="var(--accent)" font-size="9.5" font-weight="700" font-family="inherit">Voeg toe</text>
+      <rect class="ph-ui2" x="18" y="65" width="134" height="46" rx="10"/>
+      <rect x="26" y="73" width="30" height="30" rx="7" fill="#2a78d6"/>
+      <rect x="34" y="88" width="4" height="9" rx="1.5" fill="#fff"/>
+      <rect x="40" y="83" width="4" height="14" rx="1.5" fill="#fff"/>
+      <rect x="46" y="78" width="4" height="19" rx="1.5" fill="#fff"/>
+      <rect class="ph-ui" x="64" y="76" width="60" height="9" rx="4.5"/>
+      <rect class="ph-ui" x="64" y="91" width="80" height="7" rx="3.5"/>
+      <path class="arrow" d="M132 70 v-8 M127 66l5-6 5 6" transform="translate(0,-2)"/>
+      <!-- beginscherm-preview -->
+      <rect class="ph-ui2" x="18" y="130" width="134" height="152" rx="10"/>
+      <g opacity=".5">
+        <rect class="ph-ui" x="30" y="144" width="24" height="24" rx="6"/>
+        <rect class="ph-ui" x="62" y="144" width="24" height="24" rx="6"/>
+        <rect class="ph-ui" x="94" y="144" width="24" height="24" rx="6"/>
+        <rect class="ph-ui" x="30" y="180" width="24" height="24" rx="6"/>
+      </g>
+      <rect x="62" y="180" width="24" height="24" rx="6" fill="#2a78d6"/>
+      <rect x="68" y="192" width="3" height="7" rx="1.2" fill="#fff"/>
+      <rect x="73" y="188" width="3" height="11" rx="1.2" fill="#fff"/>
+      <rect x="78" y="184" width="3" height="15" rx="1.2" fill="#fff"/>
+      <circle class="hl" cx="74" cy="192" r="18"/>
+    </svg>
+    <div class="txt">
+      <span class="n">3</span>
+      <h3>Tik op “Voeg toe” — klaar!</h3>
+      <p>Rechtsboven staat <b>“Voeg toe”</b>. Daarna staat de app met een eigen icoon tussen je andere
+      apps op het beginscherm en opent hij als een echte app — hij werkt zelfs zonder internet.</p>
+    </div>
+  </div>
+
+  <div class="note"><b>Lukt het niet?</b> Dit werkt alleen in <b>Safari</b> — niet vanuit bijvoorbeeld de
+  WhatsApp- of Instagram-browser. Kreeg je de link via een appje? Tik dan eerst rechtsonder/rechtsboven op
+  “Open in Safari” (of kopieer de link en plak hem in Safari), en begin bij stap 1.</div>
+</div>
+
+<!-- ================= ANDROID ================= -->
+<div class="platform" id="pfAnd">
+  <div class="step-card">
+    <svg width="170" height="300" viewBox="0 0 170 300" aria-hidden="true">
+      <rect class="ph-frame" x="5" y="5" width="160" height="290" rx="22"/>
+      <!-- Chrome bovenbalk -->
+      <rect class="ph-ui" x="18" y="28" width="134" height="26" rx="8"/>
+      <rect class="ph-ui2" x="26" y="34" width="96" height="14" rx="7"/>
+      <text class="ph-txt" x="34" y="44">onze app store</text>
+      <!-- drie puntjes -->
+      <g>
+        <circle class="hl-fill" cx="140" cy="36" r="1.8"/>
+        <circle class="hl-fill" cx="140" cy="41" r="1.8"/>
+        <circle class="hl-fill" cx="140" cy="46" r="1.8"/>
+        <circle class="hl" cx="140" cy="41" r="10"/>
+      </g>
+      <rect class="ph-ui2" x="18" y="64" width="134" height="218" rx="6"/>
+      <rect class="ph-ui" x="30" y="78" width="110" height="10" rx="5"/>
+      <rect class="ph-ui" x="30" y="98" width="80" height="10" rx="5"/>
+      <rect class="ph-ui" x="30" y="126" width="110" height="60" rx="6"/>
+      <path class="arrow" d="M140 66 v14 M135 74l5 6 5-6" transform="translate(0,-4)"/>
+    </svg>
+    <div class="txt">
+      <span class="n">1</span>
+      <h3>Open de app-pagina in Chrome</h3>
+      <p>Tik rechtsboven op de <b>drie puntjes (⋮)</b> naast de adresbalk.</p>
+    </div>
+  </div>
+
+  <div class="step-card">
+    <svg width="170" height="300" viewBox="0 0 170 300" aria-hidden="true">
+      <rect class="ph-frame" x="5" y="5" width="160" height="290" rx="22"/>
+      <rect class="ph-ui2" x="52" y="28" width="100" height="220" rx="10"/>
+      <text class="ph-txt" x="62" y="50">Nieuw tabblad</text>
+      <text class="ph-txt" x="62" y="74">Geschiedenis</text>
+      <text class="ph-txt" x="62" y="98">Downloads</text>
+      <text class="ph-txt" x="62" y="122">Delen…</text>
+      <text class="ph-txt" x="62" y="146">Zoeken op pagina</text>
+      <!-- gemarkeerde rij -->
+      <rect class="hl" x="57" y="156" width="90" height="24" rx="6"/>
+      <text class="ph-txt-b" x="62" y="171">App installeren</text>
+      <text class="ph-txt" x="62" y="200">Vertalen</text>
+      <text class="ph-txt" x="62" y="224">Instellingen</text>
+      <path class="arrow" d="M30 168 h16 M38 163l8 5-8 5" transform="translate(-4,0)"/>
+    </svg>
+    <div class="txt">
+      <span class="n">2</span>
+      <h3>Kies “App installeren”</h3>
+      <p>Tik in het menu op <b>“App installeren”</b>. Op sommige telefoons heet dit
+      <b>“Toevoegen aan startscherm”</b> — dat is hetzelfde.</p>
+    </div>
+  </div>
+
+  <div class="step-card">
+    <svg width="170" height="300" viewBox="0 0 170 300" aria-hidden="true">
+      <rect class="ph-frame" x="5" y="5" width="160" height="290" rx="22"/>
+      <rect class="ph-ui2" x="18" y="100" width="134" height="90" rx="12"/>
+      <rect x="30" y="114" width="28" height="28" rx="7" fill="#2a78d6"/>
+      <rect x="37" y="128" width="3.5" height="8" rx="1.4" fill="#fff"/>
+      <rect x="42.5" y="124" width="3.5" height="12" rx="1.4" fill="#fff"/>
+      <rect x="48" y="120" width="3.5" height="16" rx="1.4" fill="#fff"/>
+      <rect class="ph-ui" x="66" y="117" width="60" height="9" rx="4.5"/>
+      <rect class="ph-ui" x="66" y="132" width="76" height="7" rx="3.5"/>
+      <text class="ph-txt" x="76" y="176">Annuleren</text>
+      <rect class="hl-fill" x="108" y="162" width="38" height="20" rx="10" opacity=".18"/>
+      <rect class="hl" x="108" y="162" width="38" height="20" rx="10"/>
+      <text x="113" y="175" fill="var(--accent)" font-size="9" font-weight="700" font-family="inherit">Installeren</text>
+      <path class="arrow" d="M127 200 v-10 M122 195l5-6 5 6"/>
+    </svg>
+    <div class="txt">
+      <span class="n">3</span>
+      <h3>Tik op “Installeren” — klaar!</h3>
+      <p>Bevestig in het venstertje. De app staat daarna met een eigen icoon in je app-lijst en op je
+      startscherm, en opent als een echte app — ook zonder internet.</p>
+    </div>
+  </div>
+
+  <div class="note"><b>Lukt het niet?</b> Dit werkt het best in <b>Chrome</b> (of Samsung Internet / Edge).
+  Kreeg je de link via WhatsApp? Tik dan eerst op de drie puntjes → “Openen in Chrome”, en begin bij stap 1.</div>
+</div>
+
+<footer>Tip voor daarna: open de app altijd via het nieuwe icoon, niet via de browser.<br>
+<a href="./">← Terug naar de App Store</a></footer>
+
+<script>
+const segIos = document.getElementById("segIos"), segAnd = document.getElementById("segAnd");
+const pfIos = document.getElementById("pfIos"), pfAnd = document.getElementById("pfAnd");
+function pick(ios) {
+  segIos.classList.toggle("on", ios); segAnd.classList.toggle("on", !ios);
+  pfIos.classList.toggle("on", ios); pfAnd.classList.toggle("on", !ios);
+}
+segIos.onclick = () => pick(true);
+segAnd.onclick = () => pick(false);
+// automatisch het juiste platform kiezen
+if (/android/i.test(navigator.userAgent)) pick(false);
+</script>
+</body>
+</html>
