@@ -23,6 +23,7 @@
     --separator: rgba(60, 60, 67, 0.29);
     --accent: #007aff;
     --fill: rgba(120, 120, 128, 0.16);
+    --green: #248a3d;
   }
   @media (prefers-color-scheme: dark) {
     :root {
@@ -34,6 +35,7 @@
       --separator: rgba(84, 84, 88, 0.6);
       --accent: #0a84ff;
       --fill: rgba(120, 120, 128, 0.32);
+      --green: #30d158;
     }
   }
   * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -47,7 +49,7 @@
     margin: 0 auto;
     -webkit-font-smoothing: antialiased;
   }
-  header { display: flex; align-items: flex-end; justify-content: space-between; padding: 28px 4px 14px; }
+  header.main { display: flex; align-items: flex-end; justify-content: space-between; padding: 28px 4px 14px; }
   .date {
     font-size: 13px; font-weight: 600; letter-spacing: 0.4px;
     text-transform: uppercase; color: var(--secondary-label);
@@ -69,6 +71,7 @@
     color: #fff; text-decoration: none;
     padding: 18px 18px 16px;
     box-shadow: 0 10px 24px rgba(11, 95, 208, 0.28);
+    cursor: pointer;
   }
   .hero .kicker { font-size: 12px; font-weight: 700; letter-spacing: 0.8px; text-transform: uppercase; opacity: .85; }
   .hero .title { font-size: 26px; font-weight: 800; margin-top: 2px; letter-spacing: .2px; }
@@ -84,14 +87,14 @@
     padding: 7px 20px; backdrop-filter: blur(6px);
   }
 
-  /* secties */
+  /* secties & app-rijen */
   .section-title { font-size: 22px; font-weight: 700; margin: 26px 4px 4px; }
   .section-sub { font-size: 13px; color: var(--secondary-label); margin: 0 4px 10px; }
   .applist { background: var(--card); border-radius: 16px; overflow: hidden; }
   .approw {
     display: flex; align-items: center; gap: 13px;
     padding: 12px 14px; text-decoration: none; color: inherit;
-    transition: background .1s ease;
+    transition: background .1s ease; cursor: pointer;
   }
   .approw:active { background: var(--fill); }
   .approw + .approw { border-top: 0.5px solid var(--separator); }
@@ -107,13 +110,43 @@
     background: var(--fill); color: var(--accent);
     font-family: inherit; font-size: 15px; font-weight: 700;
     border: none; border-radius: 999px; padding: 6px 18px;
-    flex-shrink: 0; min-width: 86px; text-align: center;
-  }
-  .empty-note {
-    background: var(--card); border-radius: 16px; padding: 18px 16px;
-    font-size: 14px; color: var(--secondary-label); line-height: 1.5;
+    flex-shrink: 0; min-width: 86px; text-align: center; cursor: pointer;
   }
   footer { text-align: center; font-size: 12px; color: var(--tertiary-label); margin-top: 40px; line-height: 1.6; }
+
+  /* productpagina */
+  .backbtn {
+    display: inline-flex; align-items: center; gap: 4px;
+    background: none; border: none; color: var(--accent);
+    font: inherit; font-size: 17px; font-weight: 500; cursor: pointer;
+    padding: 14px 4px 6px;
+  }
+  .detail-head { display: flex; gap: 16px; align-items: center; padding: 10px 4px 18px; }
+  .detail-head img { width: 100px; height: 100px; border-radius: 22px; box-shadow: 0 4px 12px rgba(0,0,0,.15); flex-shrink: 0; }
+  .detail-head .grow { flex: 1; min-width: 0; }
+  .detail-head h2 { font-size: 24px; font-weight: 700; line-height: 1.15; }
+  .detail-head .cat2 { font-size: 14px; color: var(--secondary-label); margin: 3px 0 12px; }
+  .bigget {
+    background: var(--accent); color: #fff; font: inherit; font-size: 15px; font-weight: 700;
+    border: none; border-radius: 999px; padding: 8px 26px; cursor: pointer;
+  }
+  .facts {
+    display: flex; background: var(--card); border-radius: 14px; margin-bottom: 6px;
+    overflow: hidden;
+  }
+  .fact { flex: 1; text-align: center; padding: 12px 6px; }
+  .fact + .fact { border-left: 0.5px solid var(--separator); }
+  .fact .k { font-size: 11px; font-weight: 700; letter-spacing: .4px; text-transform: uppercase; color: var(--tertiary-label); }
+  .fact .v { font-size: 15px; font-weight: 600; color: var(--secondary-label); margin-top: 3px; }
+  h3.dsec { font-size: 20px; font-weight: 700; margin: 24px 4px 8px; }
+  .dcard { background: var(--card); border-radius: 14px; padding: 15px 16px; font-size: 15px; line-height: 1.55; }
+  .dcard p + p { margin-top: 10px; }
+  .dcard ol, .dcard ul { margin: 2px 0 2px 20px; }
+  .dcard li { margin: 7px 0; }
+  .dcard li::marker { color: var(--accent); font-weight: 700; }
+  .dcard a { color: var(--accent); text-decoration: none; }
+  .weblink { display: block; text-align: center; font-size: 13px; color: var(--secondary-label); margin-top: 22px; }
+  .weblink a { color: var(--accent); text-decoration: none; font-weight: 600; }
 
   /* installeer-banner */
   .install-banner {
@@ -144,35 +177,45 @@
   .sheet .step .n2 { width: 26px; height: 26px; border-radius: 13px; background: var(--accent); color: #fff; font-size: 14px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
   .sheet .step svg { width: 22px; height: 22px; flex-shrink: 0; color: var(--accent); }
   .sheet .close { width: 100%; margin-top: 10px; background: var(--fill); color: var(--accent); font: inherit; font-size: 16px; font-weight: 600; border: none; border-radius: 12px; padding: 13px; cursor: pointer; }
+  .view { display: none; }
+  .view.on { display: block; animation: fade .15s ease; }
+  @keyframes fade { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; } }
 </style>
 </head>
 <body>
-<header>
-  <div>
-    <div class="date" id="today"></div>
-    <h1>App Store</h1>
+
+<!-- ============ HOME ============ -->
+<div id="homeView" class="view on">
+  <header class="main">
+    <div>
+      <div class="date" id="today"></div>
+      <h1>App Store</h1>
+    </div>
+    <div class="avatar" aria-hidden="true">R</div>
+  </header>
+
+  <div id="installSlot"></div>
+  <div id="heroSlot"></div>
+
+  <div id="installedSection" style="display:none">
+    <h2 class="section-title">Geïnstalleerd</h2>
+    <p class="section-sub">Apps die je op dit apparaat gebruikt</p>
+    <div class="applist" id="installedList"></div>
   </div>
-  <div class="avatar" aria-hidden="true">R</div>
-</header>
 
-<div id="installSlot"></div>
+  <h2 class="section-title">Alle apps</h2>
+  <p class="section-sub">Beschikbaar voor het hele gezin</p>
+  <div class="applist" id="allList"></div>
 
-<div id="heroSlot"></div>
-
-<div id="installedSection" style="display:none">
-  <h2 class="section-title">Geïnstalleerd</h2>
-  <p class="section-sub">Apps die je op dit apparaat gebruikt</p>
-  <div class="applist" id="installedList"></div>
+  <footer>
+    Apps draaien volledig op je eigen apparaat — je gegevens verlaten het nooit.
+  </footer>
 </div>
 
-<h2 class="section-title">Alle apps</h2>
-<p class="section-sub">Beschikbaar voor het hele gezin</p>
-<div class="applist" id="allList"></div>
+<!-- ============ PRODUCTPAGINA ============ -->
+<div id="detailView" class="view"></div>
 
-<footer>
-  Apps draaien volledig op je eigen apparaat — je gegevens verlaten het nooit.
-</footer>
-
+<!-- ============ iOS-INSTRUCTIES ============ -->
 <div class="sheet-backdrop" id="sheet">
   <div class="sheet">
     <h3 id="sheetTitle">Installeer</h3>
@@ -198,9 +241,29 @@ const APPS = [
     subtitle: "Financieel dashboard met plan, doelen en gezinsaccounts",
     category: "Financiën",
     href: "apps/finance/",
+    installHref: "apps/finance/?installeer",
     icon: "apps/finance/icons/icon-180.png",
     featured: true,
     tagline: "Krijg grip op je geld: inzicht, een plan en spaardoelen.",
+    description: [
+      "Grip is een persoonlijk financieel dashboard. Je uploadt de afschriften van je bankrekening (CSV — ING, Rabobank, ABN AMRO en de meeste andere banken worden automatisch herkend) en Grip laat direct zien wat er binnenkomt, waar je geld heen gaat en wat je vaste lasten zijn.",
+      "Daarna helpt een persoonlijk stappenplan — gebaseerd op Nibud-vuistregels en de YNAB-methode — je om financieel gezond te worden: eerst een buffer opbouwen, dan potjes voor grote uitgaven (auto, huisonderhoud, kleding, vakantie) en uiteindelijk beleggen. Je ziet ook precies wat je per maand en per week vrij kunt besteden.",
+      "Elk gezinslid maakt een eigen account, en binnen je account wissel je tussen omgevingen — bijvoorbeeld <b>Persoonlijk</b> voor je eigen rekening en <b>Gezamenlijk</b> voor de en/of-rekening.",
+    ],
+    usage: [
+      "Tik op <b>Installeer</b> en zet Grip op je beginscherm.",
+      "Open de app via het icoon en maak je account aan (e-mail + wachtwoord).",
+      "Download bij je bank een CSV-bestand met je af- en bijschrijvingen (voor de eerste keer bijv. 2 jaar).",
+      "Upload het bestand in Grip en vul bij Instellingen je situatie in (huur/koop, auto, kinderen, spaarsaldo).",
+      "Maandelijkse routine van 2 minuten: nieuw afschrift downloaden en uploaden — dubbele transacties worden automatisch overgeslagen.",
+    ],
+    safety: [
+      "<b>Geen server.</b> Alles draait op je eigen apparaat; je bankgegevens worden nergens naartoe gestuurd.",
+      "<b>Versleuteld met jouw wachtwoord.</b> Je gegevens zijn alleen leesbaar met jouw wachtwoord — andere gezinsleden, andere gebruikers van dit apparaat en zelfs de maker van de app kunnen er niet bij.",
+      "<b>Geen e-mails, geen tracking.</b> Je e-mailadres is alleen je inlognaam; er wordt niets verstuurd of gedeeld.",
+      "<b>Jij beheert je reservekopie.</b> Via Instellingen exporteer je al je gegevens als bestand. Let op: wachtwoord vergeten = gegevens niet terug te halen — dat is de keerzijde van échte privacy.",
+    ],
+    manualHref: "apps/finance/handleiding.html",
   },
 ];
 
@@ -211,15 +274,25 @@ const markInstalled = id => {
   if (!list.includes(id)) { list.push(id); localStorage.setItem(INSTALLED_KEY, JSON.stringify(list)); }
 };
 
-const fmt = new Intl.DateTimeFormat("nl-NL", { weekday: "long", d: undefined, day: "numeric", month: "long" });
+const fmt = new Intl.DateTimeFormat("nl-NL", { weekday: "long", day: "numeric", month: "long" });
 document.getElementById("today").textContent = fmt.format(new Date());
 
-function open(app) { markInstalled(app.id); location.href = app.href; }
+/* ---------- routing: '' = home, '#<appid>' = productpagina ---------- */
+function route() {
+  const id = location.hash.replace("#", "");
+  const app = APPS.find(a => a.id === id);
+  document.getElementById("homeView").classList.toggle("on", !app);
+  document.getElementById("detailView").classList.toggle("on", !!app);
+  if (app) renderDetail(app); else renderHome();
+  window.scrollTo({ top: 0 });
+}
+window.addEventListener("hashchange", route);
 
+/* ---------- home ---------- */
 function row(app, installed) {
   const a = document.createElement("a");
   a.className = "approw";
-  a.href = app.href;
+  a.href = "#" + app.id;
   a.innerHTML = `
     <img src="${app.icon}" alt="" width="62" height="62">
     <div class="grow">
@@ -227,20 +300,22 @@ function row(app, installed) {
       <div class="sub">${app.subtitle}</div>
       <div class="cat">${app.category}</div>
     </div>
-    <span class="getbtn">${installed ? "Open" : "Download"}</span>`;
-  a.addEventListener("click", e => { e.preventDefault(); open(app); });
+    <span class="getbtn">${installed ? "Open" : "Laad"}</span>`;
+  if (installed) {
+    a.querySelector(".getbtn").addEventListener("click", e => { e.preventDefault(); e.stopPropagation(); location.href = app.href; });
+  }
   return a;
 }
-
-function render() {
+function renderHome() {
   const installed = getInstalled();
 
   const featured = APPS.find(a => a.featured);
+  const slot = document.getElementById("heroSlot");
+  slot.innerHTML = "";
   if (featured) {
-    const isInst = installed.includes(featured.id);
     const hero = document.createElement("a");
     hero.className = "hero";
-    hero.href = featured.href;
+    hero.href = "#" + featured.id;
     hero.innerHTML = `
       <div class="kicker">Uitgelicht</div>
       <div class="title">${featured.name}</div>
@@ -248,11 +323,9 @@ function render() {
       <div class="bottom">
         <img src="${featured.icon}" alt="">
         <div class="grow"><div class="n">${featured.name}</div><div class="s">${featured.category}</div></div>
-        <span class="btn">${isInst ? "Open" : "Download"}</span>
+        <span class="btn">Bekijk</span>
       </div>`;
-    hero.addEventListener("click", e => { e.preventDefault(); open(featured); });
-    const slot = document.getElementById("heroSlot");
-    slot.innerHTML = ""; slot.appendChild(hero);
+    slot.appendChild(hero);
   }
 
   const instApps = APPS.filter(a => installed.includes(a.id));
@@ -268,7 +341,49 @@ function render() {
   allList.innerHTML = "";
   APPS.forEach(a => allList.appendChild(row(a, installed.includes(a.id))));
 }
-render();
+
+/* ---------- productpagina ---------- */
+function renderDetail(app) {
+  const installed = getInstalled().includes(app.id);
+  const el = document.getElementById("detailView");
+  el.innerHTML = `
+    <button class="backbtn" id="backBtn">‹ App Store</button>
+    <div class="detail-head">
+      <img src="${app.icon}" alt="">
+      <div class="grow">
+        <h2>${app.name}</h2>
+        <div class="cat2">${app.subtitle}</div>
+        <button class="bigget" id="btnGet">${installed ? "Open" : "Installeer"}</button>
+      </div>
+    </div>
+    <div class="facts">
+      <div class="fact"><div class="k">Prijs</div><div class="v">Gratis</div></div>
+      <div class="fact"><div class="k">Categorie</div><div class="v">${app.category}</div></div>
+      <div class="fact"><div class="k">Privacy</div><div class="v">100% lokaal</div></div>
+    </div>
+
+    <h3 class="dsec">Over deze app</h3>
+    <div class="dcard">${app.description.map(p => `<p>${p}</p>`).join("")}</div>
+
+    <h3 class="dsec">Zo gebruik je ${app.name}</h3>
+    <div class="dcard">
+      <ol>${app.usage.map(s => `<li>${s}</li>`).join("")}</ol>
+      ${app.manualHref ? `<p>Uitgebreide uitleg — inclusief hoe je bij ING, Rabobank en ABN AMRO je afschriften downloadt — vind je in de <a href="${app.manualHref}">handleiding</a>.</p>` : ""}
+    </div>
+
+    <h3 class="dsec">Privacy &amp; veiligheid</h3>
+    <div class="dcard"><ul>${app.safety.map(s => `<li>${s}</li>`).join("")}</ul></div>
+
+    <p class="weblink">Liever in de browser gebruiken, bijvoorbeeld op je laptop?
+      <a href="${app.href}" id="webLink">Open de webversie</a></p>
+  `;
+  document.getElementById("backBtn").onclick = () => { history.length > 1 ? history.back() : (location.hash = ""); };
+  document.getElementById("btnGet").onclick = () => {
+    markInstalled(app.id);
+    location.href = installed ? app.href : (app.installHref || app.href);
+  };
+  document.getElementById("webLink").addEventListener("click", () => markInstalled(app.id));
+}
 
 /* ---------- App Store zelf installeren ---------- */
 const isStandalone = window.matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
@@ -313,6 +428,8 @@ async function installFlow(name) {
 }
 document.getElementById("sheetClose").onclick = () => document.getElementById("sheet").classList.remove("on");
 document.getElementById("sheet").addEventListener("click", e => { if (e.target.id === "sheet") e.currentTarget.classList.remove("on"); });
+
+route();
 renderInstallBanner();
 
 if ("serviceWorker" in navigator && location.protocol === "https:") {

@@ -2,7 +2,7 @@
    - Pagina's (navigaties): eerst het netwerk proberen zodat updates direct
      zichtbaar zijn; alleen bij geen verbinding de offline-kopie tonen.
    - Overige bestanden (iconen e.d.): cache-first met update op de achtergrond. */
-const CACHE = "grip-v4";
+const CACHE = "grip-v5";
 const ASSETS = ["./", "./index.html", "./handleiding.html", "./manifest.webmanifest", "./icons/icon-180.png", "./icons/icon-192.png", "./icons/icon-512.png"];
 
 self.addEventListener("install", e => {

@@ -1130,8 +1130,46 @@ function showLogin() {
   $("#appHeader").style.display = "none";
   $$(".view").forEach(v => v.classList.remove("on"));
   $("#view-login").classList.add("on");
+  // Vanuit de store (of bij eerste bezoek in de browser) eerst uitnodigen om te
+  // installeren; het account maak je aan in de geïnstalleerde app. Wie bewust in
+  // de browser werkt (bijv. op een laptop), kiest "Ga door in de browser".
+  const wantsInstall = new URLSearchParams(location.search).has("installeer");
+  if (!isStandalone && (wantsInstall || (!localStorage.getItem("grip.webOk") && !auth.accounts.length))) {
+    renderWelcome();
+    return;
+  }
   loginMode = auth.accounts.length ? "login" : "register";
   renderLogin();
+}
+function renderWelcome() {
+  $("#installSlot").innerHTML = "";
+  const el = $("#view-login");
+  el.innerHTML = `
+    <div class="login-wrap">
+      <img class="login-logo" src="icons/icon-180.png" alt="">
+      <h2 class="ttl">Grip</h2>
+      <p class="sub">Krijg grip op je geld: inzicht in je inkomsten, uitgaven en vaste lasten,
+      een stappenplan om financieel gezond te worden en potjes voor je doelen.
+      Alles blijft op je eigen apparaat.</p>
+      <button class="primary" id="wInstall">Installeer op je beginscherm</button>
+      <button class="linkbtn" id="wWeb">Ga door in de browser</button>
+      <p class="footnote" style="text-align:center">Tip: installeer eerst en maak daarná je account
+      aan in de geïnstalleerde app — dan staan je gegevens meteen op de juiste plek.
+      De browser-optie is vooral handig op een laptop. <a href="handleiding.html">Lees de handleiding</a>.</p>
+    </div>`;
+  $("#wInstall").onclick = async () => {
+    if (deferredPrompt) {                   // Android / Chrome: echte installatieprompt
+      deferredPrompt.prompt();
+      await deferredPrompt.userChoice;
+      deferredPrompt = null;
+    } else $("#sheet").classList.add("on"); // iOS: Apple staat alleen de deelknop-route toe
+  };
+  $("#wWeb").onclick = () => {
+    localStorage.setItem("grip.webOk", "1");
+    loginMode = auth.accounts.length ? "login" : "register";
+    renderLogin();
+    renderInstallBanner();
+  };
 }
 function enterApp() {
   $("#tabbar").style.display = "";
