@@ -354,7 +354,7 @@ nav.tabbar button.on { color: var(--accent); }
     <button class="close" id="sheetClose">Sluit</button>
   </div>
 </div>
-<input type="file" id="filePick" accept=".csv,.txt,.tsv" multiple style="display:none">
+<input type="file" id="filePick" accept=".csv,.txt,.tsv,.pdf" multiple style="display:none">
 
 <script>
 "use strict";
@@ -784,6 +784,116 @@ function parseFile(name, text) {
     const desc = iDesc >= 0 ? String(r[iDesc] || "").trim() : "";
     return { date, amount, name: name || desc.slice(0, 40), desc, iban: "", ctpIban: "" };
   }).filter(Boolean);
+}
+
+/* ---------- PDF-afschriften (pdf.js, lokaal meegeleverd) ----------
+   PDF's zijn "geprinte" pagina's zonder vaste structuur; deze parser haalt de
+   transactieregels eruit met heuristieken (datum + bedrag per regel, Af/Bij-
+   kolommen of +/- voor het teken). CSV blijft het betrouwbaarst.            */
+let pdfLibPromise = null;
+function loadPdfLib() {
+  if (!pdfLibPromise) pdfLibPromise = new Promise((resolve, reject) => {
+    if (window.pdfjsLib) return resolve(window.pdfjsLib);
+    const s = document.createElement("script");
+    s.src = "lib/pdf.min.js";
+    s.onload = () => {
+      window.pdfjsLib.GlobalWorkerOptions.workerSrc = "lib/pdf.worker.min.js";
+      resolve(window.pdfjsLib);
+    };
+    s.onerror = () => { pdfLibPromise = null; reject(new Error("PDF-lezer kon niet laden")); };
+    document.head.appendChild(s);
+  });
+  return pdfLibPromise;
+}
+async function parsePdf(buf) {
+  const pdfjs = await loadPdfLib();
+  const doc = await pdfjs.getDocument({ data: new Uint8Array(buf) }).promise;
+  const lines = [];
+  let textLen = 0;
+  for (let p = 1; p <= doc.numPages; p++) {
+    const page = await doc.getPage(p);
+    const tc = await page.getTextContent();
+    const rows = [];
+    for (const it of tc.items) {
+      if (!it.str || !it.str.trim()) continue;
+      textLen += it.str.length;
+      const y = it.transform[5];
+      let row = rows.find(r => Math.abs(r.y - y) <= 2.5);
+      if (!row) { row = { y, items: [] }; rows.push(row); }
+      row.items.push({ x: it.transform[4], s: it.str.trim() });
+    }
+    rows.sort((a, b) => b.y - a.y);
+    for (const r of rows) { r.items.sort((a, b) => a.x - b.x); lines.push(r.items); }
+    lines.push(null); // paginagrens
+  }
+  doc.destroy();
+  if (textLen < 40) throw new Error("deze PDF bevat geen leesbare tekst (gescand document?)");
+  return extractTxFromPdfLines(lines);
+}
+function extractTxFromPdfLines(lines) {
+  const AMT_RE = /^[+-]?\s?€?\s?\d{1,3}(?:\.\d{3})*,\d{2}\s?[+-]?$/;
+  const DATE_RE = /^(\d{1,2})[-/](\d{1,2})[-/](\d{4})$|^(\d{4})-(\d{2})-(\d{2})$/;
+  const SKIP_RE = /saldo|totaal|pagina|rekeningafschrift|afschriftnummer|periode|blad\s|www\.|telefoon|kvk|btw/i;
+  const parseDate = tok => {
+    let m = tok.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})$/);
+    if (m) return `${m[3]}-${m[2].padStart(2, "0")}-${m[1].padStart(2, "0")}`;
+    m = tok.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    return m ? `${m[1]}-${m[2]}-${m[3]}` : null;
+  };
+  let afX = null, bijX = null;
+  const txs = [];
+  let cur = null;
+  for (const line of lines) {
+    if (!line) { cur = null; continue; }
+    // kolomkoppen "Af" / "Bij" onthouden voor tekenbepaling
+    for (const it of line) {
+      const t = it.s.toLowerCase();
+      if (t === "af" || t === "af (eur)") afX = it.x;
+      if (t === "bij" || t === "bij (eur)") bijX = it.x;
+    }
+    // tokens: elk item kan meerdere woorden bevatten; splits maar bewaar x
+    const tokens = [];
+    for (const it of line) for (const w of it.s.split(/\s+/)) if (w) tokens.push({ x: it.x, s: w });
+    const full = tokens.map(t => t.s).join(" ");
+    if (SKIP_RE.test(full)) { cur = null; continue; }
+    let date = null;
+    for (const t of tokens) { const d = DATE_RE.test(t.s) && parseDate(t.s); if (d) { date = d; break; } }
+    const amounts = tokens.filter(t => AMT_RE.test(t.s));
+    if (date && amounts.length) {
+      // bij meerdere bedragen (bijv. bedrag + saldo): kies het bedrag het dichtst
+      // bij de Af/Bij-kolommen, anders het eerste
+      let pick = amounts[0];
+      if (afX != null || bijX != null) {
+        pick = amounts.reduce((best, a) => {
+          const d = Math.min(Math.abs(a.x - (afX ?? 1e9)), Math.abs(a.x - (bijX ?? 1e9)));
+          const db = Math.min(Math.abs(best.x - (afX ?? 1e9)), Math.abs(best.x - (bijX ?? 1e9)));
+          return d < db ? a : best;
+        }, amounts[0]);
+      }
+      let amount = parseAmountNL(pick.s.replace(/[+-]\s?$/, m2 => m2.trim()));
+      if (isNaN(amount)) continue;
+      amount = Math.abs(amount);
+      // teken: expliciete +/-, losse Af/Bij-woorden, of kolompositie
+      const raw = pick.s;
+      const words = tokens.map(t => t.s.toLowerCase());
+      let neg;
+      if (/^-|-$/.test(raw.trim())) neg = true;
+      else if (/^\+|\+$/.test(raw.trim())) neg = false;
+      else if (words.includes("af") || words.includes("debet")) neg = true;
+      else if (words.includes("bij") || words.includes("credit")) neg = false;
+      else if (afX != null && bijX != null) neg = Math.abs(pick.x - afX) <= Math.abs(pick.x - bijX);
+      else neg = true; // afschriftregels zijn meestal afschrijvingen
+      const desc = tokens
+        .filter(t => t !== pick && !DATE_RE.test(t.s) && !AMT_RE.test(t.s) && !/^(af|bij|debet|credit)$/i.test(t.s))
+        .map(t => t.s).join(" ").trim();
+      if (!desc) continue;
+      cur = { date, amount: neg ? -amount : amount, name: desc.slice(0, 48), desc, iban: "", ctpIban: "" };
+      txs.push(cur);
+    } else if (cur && !date && !amounts.length && full.length > 1 && cur.desc.length < 200) {
+      cur.desc += " " + full; // vervolgregel van de omschrijving
+    }
+  }
+  return txs;
 }
 
 function txKey(t) {
@@ -1259,14 +1369,15 @@ function renderOverzicht() {
       <div class="card empty">
         <div class="big">📊</div>
         <h3>Welkom bij Grip</h3>
-        <p>Upload je bankafschriften (CSV) van de afgelopen maanden of jaren.
+        <p>Upload je bankafschriften (<b>CSV of PDF</b>) van de afgelopen maanden of jaren.
         Grip herkent automatisch bestanden van <b>ING, Rabobank en ABN AMRO</b> en de meeste andere banken.
         Alles blijft op dit apparaat — er wordt niets verstuurd.</p>
         <button class="primary" id="btnImport1">Afschriften uploaden</button>
         <div style="height:10px"></div>
         <button class="secondary" id="btnDemo">Of probeer met voorbeelddata</button>
         <p style="margin-top:16px" class="footnote">Exporteren doe je in je bankieren-app of internetbankieren:
-        kies je rekening → Af-/bijschrijvingen downloaden → <b>CSV</b> → periode (bijv. 2 jaar).</p>
+        kies je rekening → Af-/bijschrijvingen downloaden → <b>CSV</b> → periode (bijv. 2 jaar).
+        Heb je alleen PDF-afschriften? Die kun je ook uploaden — CSV is wel betrouwbaarder.</p>
       </div>`;
     $("#btnImport1").onclick = () => $("#filePick").click();
     $("#btnDemo").onclick = loadDemo;
@@ -1717,19 +1828,27 @@ function exportBackup() {
 $("#filePick").addEventListener("change", async e => {
   const files = [...e.target.files];
   if (!files.length) return;
-  let added = 0, dupes = 0, failed = [];
+  let added = 0, dupes = 0, failed = [], hadPdf = false;
+  if (files.some(f => f.name.toLowerCase().endsWith(".pdf"))) toast("PDF wordt gelezen…");
   for (const f of files) {
     try {
-      const parsed = parseFile(f.name, await f.text());
+      let parsed;
+      if (f.name.toLowerCase().endsWith(".pdf")) {
+        hadPdf = true;
+        parsed = await parsePdf(await f.arrayBuffer());
+      } else {
+        parsed = parseFile(f.name, await f.text());
+      }
       if (!parsed.length) { failed.push(f.name); continue; }
       const r = importTransactions(parsed);
       added += r.added; dupes += r.dupes;
-    } catch (err) { console.error(err); failed.push(f.name); }
+    } catch (err) { console.error(err); failed.push(f.name + (err && err.message ? ` (${err.message})` : "")); }
   }
   e.target.value = "";
   let msg = `${added.toLocaleString("nl-NL")} transacties toegevoegd`;
   if (dupes) msg += `, ${dupes.toLocaleString("nl-NL")} dubbele overgeslagen`;
   if (failed.length) msg += `. Niet herkend: ${failed.join(", ")}`;
+  if (hadPdf && added) msg += ". Tip: PDF-lezen is minder betrouwbaar dan CSV — controleer de aantallen bij Transacties.";
   toast(msg);
   if (added) switchTab("overzicht"); else renderView(activeTab);
 });
