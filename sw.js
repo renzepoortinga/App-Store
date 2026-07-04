@@ -1,7 +1,10 @@
-/* App Store service worker — cache-first voor de storepagina zelf.
-   Verzoeken onder /apps/ worden bewust overgeslagen: elke app heeft
-   een eigen service worker met een specifiekere scope. */
-const CACHE = "store-v1";
+/* App Store service worker.
+   - Pagina's (navigaties): eerst het netwerk proberen zodat updates direct
+     zichtbaar zijn; alleen bij geen verbinding de offline-kopie tonen.
+   - Overige bestanden: cache-first met update op de achtergrond.
+   - Verzoeken onder /apps/ worden overgeslagen: elke app heeft een eigen
+     service worker met een specifiekere scope. */
+const CACHE = "store-v2";
 const ASSETS = ["./", "./index.html", "./manifest.webmanifest", "./icons/store-180.png", "./icons/store-192.png", "./icons/store-512.png", "./apps/finance/icons/icon-180.png"];
 
 self.addEventListener("install", e => {
@@ -18,6 +21,16 @@ self.addEventListener("fetch", e => {
   const url = new URL(e.request.url);
   if (url.origin !== location.origin) return;
   if (url.pathname.includes("/apps/") && !url.pathname.endsWith(".png")) return;
+  const isPage = e.request.mode === "navigate" || url.pathname.endsWith(".html");
+  if (isPage) {
+    e.respondWith(
+      fetch(e.request).then(res => {
+        if (res.ok) { const copy = res.clone(); caches.open(CACHE).then(c => c.put(e.request, copy)); }
+        return res;
+      }).catch(() => caches.match(e.request).then(hit => hit || caches.match("./index.html")))
+    );
+    return;
+  }
   e.respondWith(
     caches.match(e.request).then(hit => {
       const fetched = fetch(e.request).then(res => {
