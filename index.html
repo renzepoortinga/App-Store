@@ -148,6 +148,13 @@
   .weblink { display: block; text-align: center; font-size: 13px; color: var(--secondary-label); margin-top: 22px; }
   .weblink a { color: var(--accent); text-decoration: none; font-weight: 600; }
 
+  .helplink {
+    display: block; background: var(--card); border-radius: 14px; padding: 13px 15px;
+    font-size: 14px; color: var(--secondary-label); text-decoration: none; margin-bottom: 14px;
+    line-height: 1.45;
+  }
+  .helplink b { color: var(--label); }
+
   /* installeer-banner */
   .install-banner {
     display: flex; align-items: center; gap: 12px;
@@ -195,6 +202,7 @@
   </header>
 
   <div id="installSlot"></div>
+  <a class="helplink" href="installeren.html">📖 <b>Hulp bij installeren</b> — stap voor stap met plaatjes, voor iPhone en Android <span style="color:var(--accent);font-weight:700">›</span></a>
   <div id="heroSlot"></div>
 
   <div id="installedSection" style="display:none">
@@ -229,6 +237,7 @@
     <div class="step"><span class="n2">3</span>
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m5 13 4 4 10-10"/></svg>
       <span>Tik op <b>“Voeg toe”</b> — klaar!</span></div>
+    <p style="text-align:center;font-size:14px;margin:12px 0 2px"><a href="installeren.html" style="color:var(--accent);text-decoration:none;font-weight:600">Liever met plaatjes? Bekijk de visuele gids ›</a></p>
     <button class="close" id="sheetClose">Sluit</button>
   </div>
 </div>

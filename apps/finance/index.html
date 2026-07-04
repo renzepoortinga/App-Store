@@ -353,6 +353,7 @@ nav.tabbar button.on { color: var(--accent); }
     <div class="step"><span class="n2">3</span>
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m5 13 4 4 10-10"/></svg>
       <span>Tik op <b>“Voeg toe”</b> — klaar!</span></div>
+    <p style="text-align:center;font-size:14px;margin:12px 0 2px"><a href="../../installeren.html" style="color:var(--accent);text-decoration:none;font-weight:600">Liever met plaatjes? Bekijk de visuele gids ›</a></p>
     <button class="close" id="sheetClose">Sluit</button>
   </div>
 </div>
@@ -398,10 +399,13 @@ const DEFAULT_SETTINGS = {
   hasCar: false,
   kids: 0,
   homeValue: 350000,
-  currentSavings: 0,      // huidig spaarsaldo (buffer)
+  currentSavings: 0,      // spaarsaldo + potjes samen (momentopname)
+  balanceStart: null,     // saldo betaalrekening op peildatum (momentopname)
+  balanceDate: null,      // peildatum van de saldi (yyyy-mm-dd)
   expensiveDebt: 0,       // dure schulden (excl. hypotheek/studieschuld)
   salaryOk: false,        // gebruiker bevestigde het herkende salaris
   checksDone: false,      // "even checken"-kaart weggeklikt
+  ownNames: "",           // eigen namen/IBAN's (komma-gescheiden): bijschrijvingen hiervan = interne overboeking
 };
 const emptyEnvData = () => ({ tx: [], overrides: {}, goals: [], settings: { ...DEFAULT_SETTINGS }, fixedExclude: {} });
 
@@ -627,13 +631,31 @@ function normName(t) {
   return (t.name || t.desc || "").toLowerCase()
     .replace(/\d+/g, "").replace(/[^a-z& ]+/g, " ").replace(/\s+/g, " ").trim().slice(0, OVERRIDE_KEYLEN);
 }
+// eigen namen/IBAN's: uit Instellingen + je accountnaam + wat uit PDF's is gelezen.
+// Overboekingen van/naar jezelf (bijv. je eigen Knab-rekening) zijn geen inkomen.
+let _ownMatch = null;
+function buildOwnMatchers() {
+  const raw = ((session && session.account.name) || "") + "," + (state.settings.ownNames || "");
+  const words = new Set(), ibans = new Set();
+  for (const part of raw.split(",")) {
+    const p = part.trim();
+    if (!p) continue;
+    if (/^[A-Za-z]{2}\d{2}/.test(p.replace(/\s/g, ""))) ibans.add(p.replace(/\s/g, "").toUpperCase());
+    else for (const w of p.toLowerCase().replace(/[^a-zà-ÿ ]+/g, " ").split(/\s+/)) if (w.length >= 4) words.add(w);
+  }
+  return { words, ibans };
+}
 function categorize(t) {
   const key = normName(t);
   if (key && state.overrides[key]) return state.overrides[key];
   const hay = (t.name + " " + t.desc).toLowerCase();
   // interne overboekingen tussen eigen rekeningen
   if (t.ctpIban && t.ownIbans && t.ownIbans.has(t.ctpIban)) return "overboeking";
+  const own = _ownMatch || (_ownMatch = buildOwnMatchers());
+  if (t.ctpIban && own.ibans.has(t.ctpIban.toUpperCase())) return "overboeking";
   for (const [re, cat] of RULES) if (re.test(hay)) return cat;
+  const nameWords = (t.name || "").toLowerCase().replace(/[^a-zà-ÿ ]+/g, " ").split(/\s+/);
+  if (nameWords.some(w => w.length >= 4 && own.words.has(w))) return "overboeking";
   if (t.amount > 0) return t.amount >= 750 ? "salaris" : "inkomen_ov";
   return "overig";
 }
@@ -832,7 +854,17 @@ async function parsePdf(buf) {
   }
   doc.destroy();
   if (textLen < 40) throw new Error("deze PDF bevat geen leesbare tekst (gescand document?)");
-  return extractTxFromPdfLines(lines);
+  // "Ten name van"-regel: rekeninghouder → eigen naam (overboekingen van jezelf ≠ inkomen)
+  let ownName = null;
+  for (let i = 0; i < lines.length - 1; i++) {
+    const l = lines[i];
+    if (l && /ten name van/i.test(l.map(x => x.s).join(" "))) {
+      const next = lines[i + 1];
+      if (next) ownName = next.filter(x => x.x < 250 && !/\d{2}-\d{2}/.test(x.s)).map(x => x.s).join(" ").trim() || null;
+      break;
+    }
+  }
+  return { txs: extractTxFromPdfLines(lines), ownName };
 }
 function extractTxFromPdfLines(lines) {
   // Rabobank-rekeningafschriften hebben een eigen layout: datum als dd-mm
@@ -992,7 +1024,7 @@ function importTransactions(parsed) {
 
 /* ---------- analytics ---------- */
 let cache = null;
-function invalidate() { cache = null; }
+function invalidate() { cache = null; _ownMatch = null; }
 
 function analytics() {
   if (cache) return cache;
@@ -1048,7 +1080,9 @@ function analytics() {
       const sd = Math.sqrt(monthlyTotals.reduce((a, b) => a + (b - mean) ** 2, 0) / monthlyTotals.length);
       const stable = mean > 0 && sd / mean < 0.45;
       if (catFixed || (stable && !NEVER_FIXED.has(g.cat))) {
-        const item = { key: gkey, name: g.name, cat: g.cat, monthly: median, count: g.txs.length };
+        const days = g.txs.map(t => +t.date.slice(8, 10)).sort((x, y) => x - y);
+        const day = days[Math.floor(days.length / 2)];
+        const item = { key: gkey, name: g.name, cat: g.cat, monthly: median, count: g.txs.length, day };
         if (state.fixedExclude && state.fixedExclude[gkey]) fixedExcluded.push(item);
         else fixed.push(item);
       }
@@ -1064,15 +1098,22 @@ function analytics() {
     if (!incGroups.has(t.nkey)) incGroups.set(t.nkey, { name: t.name || t.nkey, txs: [] });
     incGroups.get(t.nkey).txs.push(t);
   }
-  let salary = null;
+  let salary = null, structuralIncome = 0;
+  const incomeFixed = [];
   for (const g of incGroups.values()) {
     const mks = [...new Set(g.txs.map(t => monthKey(t.date)))].filter(mk => windowSet.has(mk));
     if (avgWindow.length >= 2 && mks.length >= Math.max(2, Math.round(avgWindow.length * 0.5))) {
       const totals = mks.map(mk => g.txs.filter(t => monthKey(t.date) === mk).reduce((a, t) => a + t.amount, 0)).sort((a, b) => a - b);
       const median = totals[Math.floor(totals.length / 2)] || 0;
+      if (median >= 25) {
+        structuralIncome += median; // structureel = som van terugkerende bronnen (loon, toeslagen, …)
+        const days = g.txs.map(t => +t.date.slice(8, 10)).sort((x, y) => x - y);
+        incomeFixed.push({ name: g.name, cat: g.txs[0].cat, monthly: median, day: days[Math.floor(days.length / 2)], count: g.txs.length });
+      }
       if (median >= 500 && (!salary || median > salary.monthly)) salary = { name: g.name, monthly: median };
     }
   }
+  incomeFixed.sort((a, b) => b.monthly - a.monthly);
 
   // categorie-totalen (gem. p/m over venster)
   const catAvg = {};
@@ -1082,7 +1123,7 @@ function analytics() {
   }
 
   const income = state.settings.incomeOverride || avgIncome;
-  cache = { enriched, byMonth, months, avgWindow, avgIncome, avgExpense, avgSaving, fixed, fixedExcluded, fixedTotal, catAvg, income, salary, ownIbans };
+  cache = { enriched, byMonth, months, avgWindow, avgIncome, avgExpense, avgSaving, fixed, fixedExcluded, fixedTotal, catAvg, income, salary, structuralIncome, incomeFixed, ownIbans };
   return cache;
 }
 
@@ -1100,6 +1141,21 @@ function bufferAdvice() {
   const sixMonths = Math.round(a.fixedTotal * 6);
   const advies = Math.max(nibud, threeMonths);
   return { nibud, threeMonths, sixMonths, advies };
+}
+// vermogen nu = saldi op de peildatum + alle echte inkomsten/uitgaven daarna
+// (overboekingen en sparen verschuiven alleen geld binnen je eigen vermogen)
+function computeWealth() {
+  const s = state.settings;
+  const base = (s.balanceStart ?? 0) + (s.currentSavings || 0);
+  if (s.balanceStart == null || !s.balanceDate) return s.currentSavings || 0;
+  const a = analytics();
+  let delta = 0;
+  for (const t of a.enriched) {
+    if (t.date <= s.balanceDate) continue;
+    if (t.type === "transfer" || t.type === "saving") continue;
+    delta += t.amount;
+  }
+  return base + delta;
 }
 function goalsMonthlyTotal() {
   return state.goals.reduce((a, g) => a + goalMonthly(g), 0);
@@ -1299,7 +1355,7 @@ function chartForecast(el, data, target) {
   const W = Math.max(320, el.clientWidth || 600), H = 220;
   const padL = 46, padR = 8, padT = 10, padB = 22;
   const iw = W - padL - padR, ih = H - padT - padB;
-  const allV = data.flatMap(d => [d.plan, d.cur]).concat(target ? [target] : []);
+  const allV = data.flatMap(d => d.plan == null ? [d.cur] : [d.plan, d.cur]).concat(target ? [target] : []);
   const maxV = Math.max(100, ...allV) * 1.06;
   const minV = Math.min(0, ...allV);
   const y = v => padT + ih - ((v - minV) / (maxV - minV)) * ih;
@@ -1318,7 +1374,7 @@ function chartForecast(el, data, target) {
   const line = (key, col) =>
     `<polyline fill="none" stroke="${col}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" points="${data.map((d, i) => `${x(i)},${y(d[key])}`).join(" ")}"/>`;
   s += line("cur", "var(--series-alt)");
-  s += line("plan", "var(--series-in)");
+  if (data[0].plan != null) s += line("plan", "var(--series-in)");
   const lblEvery = Math.ceil(data.length / 6);
   data.forEach((d, i) => {
     if (i % lblEvery === 0) s += `<text x="${x(i)}" y="${H - 6}" text-anchor="middle" font-size="10" fill="var(--muted-ink)">${d.label}</text>`;
@@ -1328,7 +1384,7 @@ function chartForecast(el, data, target) {
   s += `<line x1="${padL}" x2="${W - padR}" y1="${y(Math.max(0, minV))}" y2="${y(Math.max(0, minV))}" stroke="var(--axis)" stroke-width="1"/></svg>`;
   el.innerHTML = s;
   attachTooltip(el, data, d =>
-    `<b>${d.full}</b><br>Volgens plan: <b>${fmtEur(d.plan)}</b><br>Huidig tempo: <b>${fmtEur(d.cur)}</b>`);
+    `<b>${d.full}</b>${d.plan != null ? `<br>Volgens plan: <b>${fmtEur(d.plan)}</b>` : ""}<br>Huidig tempo: <b>${fmtEur(d.cur)}</b>`);
 }
 
 /* ---------- views ---------- */
@@ -1442,7 +1498,7 @@ function renderLogin(err) {
       <div class="field"><input type="password" id="liPw" placeholder="Wachtwoord" autocomplete="${reg ? "new-password" : "current-password"}"></div>
       ${reg ? `<div class="field"><input type="password" id="liPw2" placeholder="Herhaal wachtwoord" autocomplete="new-password"></div>` : ""}
       <div class="remember"><span>Aangemeld blijven op dit apparaat</span>
-        <span class="switch"><input type="checkbox" id="liRemember" checked><span></span></span></div>
+        <label class="switch"><input type="checkbox" id="liRemember" checked><span></span></label></div>
       <button class="primary" id="liGo">${reg ? "Maak account" : "Log in"}</button>
       <button class="linkbtn" id="liSwitch">${reg ? "Ik heb al een account — log in" : "Nieuw hier? Maak een account"}</button>
       <p class="footnote" style="text-align:center">
@@ -1549,10 +1605,12 @@ function renderOverzicht() {
     <div class="card" style="margin-top:12px">
       <h3 style="margin-bottom:8px">Even checken ✓</h3>
       ${a.salary && !salaryHandled ? `
-        <p class="footnote" style="font-size:14px;margin-bottom:8px">Klopt het dat je inkomen
-        <b>± ${fmtEur(a.salary.monthly)} per maand</b> is (van “${esc(cap(a.salary.name))}”)?</p>
+        <p class="footnote" style="font-size:14px;margin-bottom:8px">Klopt het dat je structurele inkomen
+        <b>± ${fmtEur(a.structuralIncome)} per maand</b> is?
+        Grootste bron: “${esc(cap(a.salary.name))}” (± ${fmtEur(a.salary.monthly)} p/m).
+        Losse bijschrijvingen zoals terugbetalingen tellen hier niet in mee.</p>
         <div style="display:flex;gap:8px;margin-bottom:12px">
-          <button class="small" id="ckSalYes">Klopt</button>
+          <button class="small" id="ckSalYes">Klopt — reken hiermee</button>
           <button class="small" id="ckSalNo">Aanpassen</button>
         </div>
         <div id="ckSalEdit"></div>`
@@ -1599,12 +1657,23 @@ function renderOverzicht() {
       <div class="chart-wrap" id="chCats"></div>
     </div>
 
-    <h2 class="sec">Vaste lasten <span class="badge">${fmtEur(a.fixedTotal)} p/m</span></h2>
+    ${a.incomeFixed.length ? `
+    <h2 class="sec">Vaste inkomsten <span class="badge">${fmtEur(a.incomeFixed.reduce((s2, f) => s2 + f.monthly, 0))} p/m</span></h2>
+    <div class="list">
+      ${a.incomeFixed.map(f => `
+        <div class="row">
+          <div class="emoji">${CATS[f.cat].emoji}</div>
+          <div class="grow"><div class="t">${esc(cap(f.name))}</div><div class="d">rond de ${f.day}e · ${CATS[f.cat].label}</div></div>
+          <div class="amt pos">+${fmtEur(f.monthly)}<span style="font-weight:400;font-size:12px;color:var(--secondary-label)"> p/m</span></div>
+        </div>`).join("")}
+    </div>` : ""}
+
+    <h2 class="sec">Vaste lasten & abonnementen <span class="badge">${fmtEur(a.fixedTotal)} p/m</span></h2>
     <div class="list">
       ${a.fixed.slice(0, 20).map(f => `
         <div class="row">
           <div class="emoji">${CATS[f.cat].emoji}</div>
-          <div class="grow"><div class="t">${esc(cap(f.name))}</div><div class="d">${CATS[f.cat].label} · ${f.count}×</div></div>
+          <div class="grow"><div class="t">${esc(cap(f.name))}</div><div class="d">rond de ${f.day}e · ${CATS[f.cat].label}</div></div>
           <div class="amt">${fmtEur(f.monthly)}<span style="font-weight:400;font-size:12px;color:var(--secondary-label)"> p/m</span></div>
           <button class="small" data-fx="${esc(f.key)}" title="Geen vaste last" aria-label="Geen vaste last" style="padding:5px 10px"><span class="danger">✕</span></button>
         </div>`).join("") || `<div class="row"><div class="grow d">Nog te weinig maanden data om vaste lasten te herkennen (minimaal 3).</div></div>`}
@@ -1631,7 +1700,12 @@ function renderOverzicht() {
   $("#btnImport2").onclick = () => $("#filePick").click();
   // even-checken-kaart
   const salYes = $("#ckSalYes");
-  if (salYes) salYes.onclick = () => { state.settings.salaryOk = true; save(); renderOverzicht(); toast("Top — inkomen bevestigd"); };
+  if (salYes) salYes.onclick = () => {
+    state.settings.salaryOk = true;
+    state.settings.incomeOverride = Math.round(a.structuralIncome);
+    save(); renderOverzicht();
+    toast("We rekenen nu met " + fmtEur(Math.round(a.structuralIncome)) + " p/m — aanpasbaar bij Instellingen");
+  };
   const salNo = $("#ckSalNo");
   if (salNo) salNo.onclick = () => {
     $("#ckSalEdit").innerHTML = `
@@ -1676,8 +1750,9 @@ function renderPlan() {
 
   // vooruitblik: verwacht vermogen per maand, in twee tempo's
   const netCurrent = a.income - a.avgExpense;                 // huidig tempo (gemiddeld overgehouden)
+  const hasPlan = goalsM > 0;
   const netPlan = goalsM;                                     // volgens plan (bewust opzijgezet)
-  const start = state.settings.currentSavings || 0;
+  const start = Math.round(computeWealth());                  // saldi (peildatum) + echte in/uitgaven sindsdien
   const now = new Date();
   const HORIZON = 36;
   const fcData = [];
@@ -1686,7 +1761,7 @@ function renderPlan() {
     fcData.push({
       label: MND[d.getMonth()] + (d.getMonth() === 0 || m === 0 ? " ’" + String(d.getFullYear()).slice(2) : ""),
       full: fullMonth(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`),
-      plan: Math.round(start + netPlan * m),
+      plan: hasPlan ? Math.round(start + netPlan * m) : null,
       cur: Math.round(start + netCurrent * m),
     });
   }
@@ -1720,20 +1795,21 @@ function renderPlan() {
         style="width:100%;max-width:none;accent-color:var(--accent);padding:8px 0;background:none">
       <div id="fcStats"></div>
       <p class="footnote" style="margin-top:8px">Aannames: je inkomen en uitgavenpatroon blijven zoals de
-      afgelopen ${a.avgWindow.length} maanden, startpunt is je huidige spaarsaldo (${fmtEur(start)},
-      instelbaar bij Instellingen). <b>Volgens plan</b> = je zet elke maand je doelen-bedrag opzij;
-      <b>huidig tempo</b> = wat je nu gemiddeld overhoudt.</p>
+      afgelopen ${a.avgWindow.length} maanden. Startpunt is je vermogen nu: <b>${fmtEur(start)}</b>
+      (saldi uit Instellingen + je echte in- en uitgaven sindsdien).
+      ${hasPlan ? "<b>Volgens plan</b> = je zet elke maand je doelen-bedrag opzij; <b>huidig tempo</b> = wat je nu gemiddeld overhoudt."
+                : "<b>Tip:</b> stel doelen in bij Doelen — dan zie je hier ook de “volgens plan”-lijn."}</p>
     </div>
     <div class="chart-card">
       <div class="chart-title">Verwacht vermogen</div>
       <div class="legend">
-        <span class="key"><span class="swatch" style="background:var(--series-in)"></span>Volgens plan</span>
+        ${hasPlan ? `<span class="key"><span class="swatch" style="background:var(--series-in)"></span>Volgens plan</span>` : ""}
         <span class="key"><span class="swatch" style="background:var(--series-alt)"></span>Huidig tempo</span>
       </div>
       <div class="chart-wrap" id="chForecast"></div>
       <details class="tbl"><summary>Bekijk als tabel</summary><table class="data">
-        <tr><th>Maand</th><th>Volgens plan</th><th>Huidig tempo</th></tr>
-        ${fcData.filter((_, i) => i % 6 === 0 && i > 0).map(d => `<tr><td>${d.full}</td><td>${fmtEur(d.plan)}</td><td>${fmtEur(d.cur)}</td></tr>`).join("")}
+        <tr><th>Maand</th>${hasPlan ? "<th>Volgens plan</th>" : ""}<th>Huidig tempo</th></tr>
+        ${fcData.filter((_, i) => i % 6 === 0 && i > 0).map(d => `<tr><td>${d.full}</td>${hasPlan ? `<td>${fmtEur(d.plan)}</td>` : ""}<td>${fmtEur(d.cur)}</td></tr>`).join("")}
       </table></details>
     </div>
 
@@ -1778,7 +1854,8 @@ function renderPlan() {
       return `<div class="budget-row"><span class="l">${g.emoji} ${esc(g.name)}</span><span class="v ${done ? "pos" : ""}">${done ? "bereikt ✓" : fmtEur(val) + " van " + fmtEur(g.target)}</span></div>`;
     }).join("");
     $("#fcStats").innerHTML = `
-      <div class="budget-row"><span class="l">Vermogen volgens plan</span><span class="v ${planV < 0 ? "neg" : ""}">${fmtEur(planV)}</span></div>
+      <div class="budget-row"><span class="l">Vermogen nu</span><span class="v" style="font-weight:500">${fmtEur(start)}</span></div>
+      ${hasPlan ? `<div class="budget-row"><span class="l">Vermogen volgens plan</span><span class="v ${planV < 0 ? "neg" : ""}">${fmtEur(planV)}</span></div>` : ""}
       <div class="budget-row"><span class="l">Vermogen bij huidig tempo</span><span class="v ${curV < 0 ? "neg" : ""}">${fmtEur(curV)}</span></div>
       <div class="budget-row"><span class="l">Leefgeld per maand</span><span class="v">${fmtEur(spendable)}</span></div>
       <div class="budget-row"><span class="l">Bufferdoel ${fmtEur(buf.advies)} · huidig tempo</span><span class="v" style="font-weight:500">${bufTxt(curV)}</span></div>
@@ -1969,7 +2046,7 @@ function renderInstellingen() {
       <div class="frow"><label>${esc(session.account.name)}<div class="hint">${esc(session.account.email)}</div></label>
         <button class="small" id="btnLogout">Log uit</button></div>
       <div class="frow"><label>Aangemeld blijven<div class="hint">automatisch inloggen op dit apparaat</div></label>
-        <span class="switch"><input type="checkbox" id="sRemember" ${remembered ? "checked" : ""}><span></span></span></div>
+        <label class="switch"><input type="checkbox" id="sRemember" ${remembered ? "checked" : ""}><span></span></label></div>
       <div class="frow"><label>Wachtwoord wijzigen</label><button class="small" id="btnPwForm">Wijzig</button></div>
     </div>
     <div id="pwForm"></div>
@@ -1995,10 +2072,14 @@ function renderInstellingen() {
         <select id="sHousing"><option value="huur" ${s.housing === "huur" ? "selected" : ""}>Huurwoning</option><option value="koop" ${s.housing === "koop" ? "selected" : ""}>Koopwoning</option></select></div>
       <div class="frow" id="rowHomeValue" style="${s.housing === "koop" ? "" : "display:none"}"><label>Woningwaarde<div class="hint">voor onderhoudsreservering (1%/jaar)</div></label>
         <input type="number" id="sHomeValue" value="${s.homeValue}" step="10000"></div>
-      <div class="frow"><label>Auto</label><span class="switch"><input type="checkbox" id="sCar" ${s.hasCar ? "checked" : ""}><span></span></span></div>
+      <div class="frow"><label>Auto</label><label class="switch"><input type="checkbox" id="sCar" ${s.hasCar ? "checked" : ""}><span></span></label></div>
       <div class="frow"><label>Kinderen</label><input type="number" id="sKids" value="${s.kids}" min="0" max="10" step="1"></div>
-      <div class="frow"><label>Huidig spaarsaldo<div class="hint">je buffer tot nu toe</div></label><input type="number" id="sSavings" value="${s.currentSavings}" step="100"></div>
+      <div class="frow"><label>Spaarsaldo & potjes<div class="hint">alles op je spaarrekening(en) samen, nu</div></label><input type="number" id="sSavings" value="${s.currentSavings}" step="100"></div>
+      <div class="frow"><label>Saldo betaalrekening<div class="hint">${s.balanceDate ? `peildatum ${s.balanceDate.split("-").reverse().join("-")} — Grip telt je in- en uitgaven vanaf die datum erbij op` : "vul eenmalig in; Grip volgt je vermogen daarna via je uploads"}</div></label>
+        <input type="number" id="sBalance" value="${s.balanceStart ?? ""}" placeholder="—" step="10"></div>
       <div class="frow"><label>Dure schulden<div class="hint">excl. hypotheek & studieschuld</div></label><input type="number" id="sDebt" value="${s.expensiveDebt}" step="100"></div>
+      <div class="frow"><label>Eigen namen & IBAN's<div class="hint">overboekingen van/naar jezelf tellen dan niet als inkomen — komma-gescheiden</div></label>
+        <input type="text" id="sOwnNames" value="${esc(s.ownNames || "")}" placeholder="bijv. Poortinga, NL63KNAB…"></div>
     </div>
 
     <h2 class="sec">Gegevens</h2>
@@ -2024,6 +2105,11 @@ function renderInstellingen() {
     if (bufGoal) bufGoal.current = state.settings.currentSavings;
   });
   bind("#sDebt", t => state.settings.expensiveDebt = Math.max(0, +t.value || 0));
+  bind("#sOwnNames", t => state.settings.ownNames = t.value.trim());
+  bind("#sBalance", t => {
+    if (t.value === "") { state.settings.balanceStart = null; state.settings.balanceDate = null; }
+    else { state.settings.balanceStart = +t.value; state.settings.balanceDate = new Date().toISOString().slice(0, 10); }
+  });
   $("#btnImp4").onclick = () => $("#filePick").click();
   $("#btnLogout").onclick = logout;
   $("#sRemember").onchange = e => { setRemember(e.target.checked); toast(e.target.checked ? "Je blijft aangemeld op dit apparaat" : "Automatisch inloggen uitgeschakeld"); };
@@ -2109,7 +2195,15 @@ $("#filePick").addEventListener("change", async e => {
       let parsed;
       if (f.name.toLowerCase().endsWith(".pdf")) {
         hadPdf = true;
-        parsed = await parsePdf(await f.arrayBuffer());
+        const res = await parsePdf(await f.arrayBuffer());
+        parsed = res.txs;
+        // rekeninghouder uit het afschrift → eigen namen (voor overboeking-detectie)
+        if (res.ownName) {
+          const cur2 = (state.settings.ownNames || "").toLowerCase();
+          if (!cur2.includes(res.ownName.toLowerCase())) {
+            state.settings.ownNames = (state.settings.ownNames ? state.settings.ownNames + ", " : "") + res.ownName;
+          }
+        }
       } else {
         parsed = parseFile(f.name, await f.text());
       }
