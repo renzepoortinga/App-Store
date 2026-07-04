@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Handleiding — Grip</title>
+<meta name="description" content="Stap-voor-stap uitleg: Grip installeren, een account maken, bankafschriften downloaden bij ING, Rabobank en ABN AMRO, en aan de slag met je financiële plan.">
+<link rel="icon" href="icons/icon-192.png">
+<style>
+  :root {
+    --bg: #f2f2f7; --card: #ffffff; --label: #000; --secondary-label: rgba(60,60,67,.6);
+    --separator: rgba(60,60,67,.29); --accent: #007aff; --fill: rgba(120,120,128,.16);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #000; --card: #1c1c1e; --label: #fff; --secondary-label: rgba(235,235,245,.6);
+      --separator: rgba(84,84,88,.6); --accent: #0a84ff; --fill: rgba(120,120,128,.32); }
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, system-ui, "Segoe UI", sans-serif;
+    background: var(--bg); color: var(--label); -webkit-font-smoothing: antialiased;
+    padding: max(env(safe-area-inset-top), 16px) 16px 48px; max-width: 680px; margin: 0 auto;
+    line-height: 1.55;
+  }
+  a { color: var(--accent); text-decoration: none; }
+  header { padding: 24px 0 10px; }
+  h1 { font-size: 32px; font-weight: 700; }
+  .lead { font-size: 16px; color: var(--secondary-label); margin-top: 6px; }
+  h2 { font-size: 22px; font-weight: 700; margin: 30px 0 10px; }
+  h3 { font-size: 17px; font-weight: 600; margin: 18px 0 6px; }
+  .card { background: var(--card); border-radius: 14px; padding: 16px; margin-bottom: 12px; font-size: 15px; }
+  .card p { margin-bottom: 10px; }
+  .card p:last-child { margin-bottom: 0; }
+  ol, ul { margin: 8px 0 10px 22px; }
+  li { margin-bottom: 7px; }
+  .tip { border-left: 3px solid var(--accent); padding: 10px 14px; background: var(--fill); border-radius: 8px; font-size: 14px; margin: 10px 0; }
+  .warn { border-left-color: #ff9500; }
+  .back {
+    display: inline-block; background: var(--fill); color: var(--accent);
+    font-size: 15px; font-weight: 600; border-radius: 999px; padding: 8px 18px; margin-bottom: 8px;
+  }
+  code { background: var(--fill); border-radius: 5px; padding: 1px 6px; font-size: 13px; }
+  footer { text-align: center; font-size: 13px; color: var(--secondary-label); margin-top: 36px; }
+</style>
+</head>
+<body>
+<a class="back" href="./">← Terug naar Grip</a>
+<header>
+  <h1>📖 Zo werkt Grip</h1>
+  <p class="lead">Alles wat je moet weten, stap voor stap — ook als je niet technisch bent.</p>
+</header>
+
+<h2>Wat is Grip?</h2>
+<div class="card">
+  <p>Grip is een persoonlijk financieel dashboard. Je uploadt de afschriften van je bankrekening
+  en Grip laat zien wat er binnenkomt, waar je geld heen gaat en wat je vaste lasten zijn.
+  Daarna helpt Grip je met een <b>stappenplan om financieel gezond te worden</b>
+  (gebaseerd op vuistregels van het Nibud en de YNAB-methode), met spaardoelen
+  en met een duidelijk bedrag dat je per maand en per week vrij kunt besteden.</p>
+  <p>🔒 <b>Belangrijk om te weten:</b> Grip heeft geen server. Alles wat je uploadt blijft op je
+  eigen telefoon of computer, versleuteld met jouw wachtwoord. Niemand anders kan bij jouw
+  gegevens — ook andere gezinsleden met een eigen account niet, en ook de maker van de app niet.</p>
+</div>
+
+<h2>Stap 1 — Zet Grip op je beginscherm</h2>
+<div class="card">
+  <ol>
+    <li>Open Grip in <b>Safari</b> (iPhone/iPad) of <b>Chrome</b> (Android).</li>
+    <li>iPhone: tik op de <b>deelknop</b> (het vierkantje met pijl omhoog, onderaan) en kies
+      <b>“Zet op beginscherm”</b>.<br>Android: tik op de drie puntjes → <b>“App installeren”</b>.</li>
+    <li>Er staat nu een Grip-icoon tussen je apps. Open de app voortaan altijd via dát icoon.</li>
+  </ol>
+  <div class="tip warn"><b>Let op:</b> de geïnstalleerde app en de browser hebben elk hun eigen opslag.
+  Maak je account dus aan <b>in de geïnstalleerde app</b> (na stap 1), niet eerst in de browser —
+  anders zie je je gegevens niet terug in de app.</div>
+</div>
+
+<h2>Stap 2 — Maak je account</h2>
+<div class="card">
+  <ol>
+    <li>Open de app en kies <b>“Nieuw hier? Maak een account”</b>.</li>
+    <li>Vul je naam, e-mailadres en een wachtwoord (minimaal 8 tekens) in.</li>
+    <li>Laat <b>“Aangemeld blijven”</b> aan staan op je eigen telefoon — dan hoef je niet elke keer
+      in te loggen. Op een gedeeld apparaat kun je hem beter uitzetten.</li>
+  </ol>
+  <p>Ieder gezinslid maakt zo z’n <b>eigen account</b> op z’n eigen apparaat (of op hetzelfde apparaat —
+  ieder account is met het eigen wachtwoord versleuteld, dus jullie kunnen niet bij elkaars gegevens).</p>
+  <div class="tip warn"><b>Onthoud je wachtwoord goed.</b> Omdat niemand bij jouw gegevens kan, kan
+  niemand ze ook voor je terughalen: wachtwoord vergeten betekent opnieuw beginnen. Maak daarom af en
+  toe een reservekopie via <b>Instellingen → Reservekopie → Exporteer</b> en bewaar dat bestand ergens veilig.</div>
+</div>
+
+<h2>Stap 3 — Download je afschriften bij je bank</h2>
+<div class="card">
+  <p>Grip leest <b>CSV-bestanden</b> (soms heet dit “kommagescheiden”). Zo download je ze —
+  de menunamen kunnen per app-versie iets verschillen:</p>
+
+  <h3>🦁 ING</h3>
+  <ol>
+    <li>Log in op <b>mijn.ing.nl</b> (website werkt het makkelijkst) en kies je betaalrekening.</li>
+    <li>Tik op het <b>download-icoontje</b> (pijl omlaag) bij “Af- en bijschrijvingen”.</li>
+    <li>Kies de periode (voor de eerste keer: bijv. de afgelopen 2 jaar) en als bestandsformaat
+      <b>“Kommagescheiden (CSV)”</b> → <b>Download</b>.</li>
+  </ol>
+
+  <h3>🔵 Rabobank</h3>
+  <ol>
+    <li>Log in op <b>rabobank.nl</b> of open de Rabo-app en ga naar je betaalrekening.</li>
+    <li>Kies <b>“Transacties downloaden”</b> (op de website onder je saldo of via Service).</li>
+    <li>Kies bestandsformaat <b>CSV</b>, stel de periode in en download het bestand.</li>
+  </ol>
+
+  <h3>🟢 ABN AMRO</h3>
+  <ol>
+    <li>Log in op <b>abnamro.nl</b> → Internet Bankieren.</li>
+    <li>Ga naar <b>“Tools” → “Mutaties downloaden”</b> (of zoek op “downloaden”).</li>
+    <li>Kies je rekening en de periode, als formaat <b>TXT (kladblok)</b> of CSV → download.</li>
+  </ol>
+
+  <h3>🏦 Andere bank (ASN, SNS, Bunq, Knab, …)</h3>
+  <p>Zoek in je bankomgeving naar “transacties exporteren” of “afschriften downloaden” en kies CSV.
+  Grip herkent de meeste formaten automatisch.</p>
+
+  <div class="tip">Op een iPhone komt het bestand in de app <b>Bestanden</b> (map “Downloads”) terecht.
+  Dat is precies waar Grip het straks kan vinden.</div>
+</div>
+
+<h2>Stap 4 — Upload in Grip</h2>
+<div class="card">
+  <ol>
+    <li>Open Grip en tik op <b>“Afschriften uploaden”</b> (op het Overzicht of bij Instellingen).</li>
+    <li>Kies het gedownloade bestand (of meerdere tegelijk).</li>
+    <li>Klaar! Grip sorteert alles automatisch in categorieën en herkent je vaste lasten.
+      Klopt een categorie niet? Tik in het tabblad <b>Transacties</b> op de categorie onder een
+      transactie en kies de juiste — Grip past het meteen toe op alle transacties van die partij.</li>
+  </ol>
+  <div class="tip"><b>Maandelijkse routine (2 minuten):</b> download aan het begin van de maand het
+  afschrift van de vorige maand en upload het. Dubbele transacties slaat Grip automatisch over,
+  dus overlappende periodes zijn geen probleem.</div>
+</div>
+
+<h2>Omgevingen: persoonlijk én gezamenlijk</h2>
+<div class="card">
+  <p>Bovenaan het scherm zie je knoppen zoals <b>👤 Persoonlijk</b> en <b>🏠 Gezamenlijk</b>.
+  Dit zijn aparte administraties binnen jouw account, elk met eigen transacties, doelen en instellingen:</p>
+  <ul>
+    <li><b>Persoonlijk</b> — upload hier de afschriften van je eigen rekening.</li>
+    <li><b>Gezamenlijk</b> — upload hier de afschriften van jullie en/of-rekening. Jij en je partner
+      kunnen allebei (elk in het eigen account) hetzelfde CSV-bestand van de gezamenlijke rekening
+      uploaden, zodat jullie er allebei zicht op hebben.</li>
+  </ul>
+  <p>Via de <b>+</b>-knop maak je extra omgevingen (bijv. voor een bedrijf of vereniging).
+  Beheren (hernoemen, wissen) doe je bij <b>Instellingen → Omgevingen</b>.</p>
+</div>
+
+<h2>Wat doet Grip daarna voor je?</h2>
+<div class="card">
+  <ul>
+    <li><b>Overzicht</b> — inkomsten, uitgaven en netto per maand, je vaste lasten en waar je geld heen gaat.</li>
+    <li><b>Plan</b> — je persoonlijke stappenplan: mini-buffer van €1.000 → dure schulden aflossen →
+      volledige buffer op maat (Nibud) → potjes voor grote uitgaven → beleggen. Plus het bedrag dat je
+      <b>per maand en per week vrij kunt besteden</b>.</li>
+    <li><b>Doelen</b> — potjes voor buffer, auto, kind, onderhoud huis, kleding of vakantie, met
+      voorgestelde bedragen en een check of het past binnen wat je overhoudt.</li>
+    <li><b>Transacties</b> — alles doorzoeken, filteren en categorieën corrigeren.</li>
+  </ul>
+  <p>Vul bij <b>Instellingen → Jouw situatie</b> in of je huurt of koopt, of je een auto en kinderen
+  hebt en wat je huidige spaarsaldo is — dan kloppen het bufferadvies en het plan precies voor jou.</p>
+</div>
+
+<h2>Veelgestelde vragen</h2>
+<div class="card">
+  <h3>Kan iemand anders mijn gegevens zien?</h3>
+  <p>Nee. Je gegevens staan alleen op jouw apparaat en zijn versleuteld met jouw wachtwoord.
+  Er is geen server, dus er valt ook nergens “in te breken”. Zelfs iemand met toegang tot dit
+  apparaat kan zonder jouw wachtwoord niets lezen (zet dan wel “Aangemeld blijven” uit).</p>
+  <h3>Ik ben mijn wachtwoord vergeten. Wat nu?</h3>
+  <p>Dat kan helaas niet hersteld worden — dat is de keerzijde van échte privacy. Heb je een
+  reservekopie (JSON-bestand)? Maak dan een nieuw account en gebruik
+  <b>Instellingen → Reservekopie → Herstel</b>.</p>
+  <h3>Krijg ik e-mails van Grip?</h3>
+  <p>Nee, nooit. Je e-mailadres is alleen je inlognaam; er wordt niets verstuurd of gedeeld.</p>
+  <h3>Kan ik Grip op meerdere apparaten gebruiken?</h3>
+  <p>Ja, maar accounts staan per apparaat. Maak op het nieuwe apparaat een account en zet je
+  gegevens over met een reservekopie (exporteren op het oude, herstellen op het nieuwe).</p>
+  <h3>Is dit financieel advies?</h3>
+  <p>Nee. Grip geeft inzicht en algemene vuistregels (Nibud, YNAB). Voor persoonlijk advies
+  ga je naar een financieel adviseur.</p>
+</div>
+
+<footer>Grip · onderdeel van je persoonlijke app store · <a href="./">terug naar de app</a></footer>
+</body>
+</html>
