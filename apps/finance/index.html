@@ -32,6 +32,7 @@
   /* chart tokens (validated palette, light) */
   --series-in: #2a78d6;                 /* inkomen */
   --series-out: #eb6834;                /* uitgaven */
+  --series-alt: #1baf7a;                /* tweede reeks (vooruitblik) */
   --div-pos: #2a78d6;
   --div-neg: #e34948;
   --seq: #2a78d6;
@@ -58,6 +59,7 @@
     /* chart tokens (validated palette, dark) */
     --series-in: #3987e5;
     --series-out: #d95926;
+    --series-alt: #199e70;
     --div-pos: #3987e5;
     --div-neg: #e66767;
     --seq: #3987e5;
@@ -354,7 +356,7 @@ nav.tabbar button.on { color: var(--accent); }
     <button class="close" id="sheetClose">Sluit</button>
   </div>
 </div>
-<input type="file" id="filePick" accept=".csv,.txt,.tsv" multiple style="display:none">
+<input type="file" id="filePick" accept=".csv,.txt,.tsv,.pdf" multiple style="display:none">
 
 <script>
 "use strict";
@@ -398,8 +400,10 @@ const DEFAULT_SETTINGS = {
   homeValue: 350000,
   currentSavings: 0,      // huidig spaarsaldo (buffer)
   expensiveDebt: 0,       // dure schulden (excl. hypotheek/studieschuld)
+  salaryOk: false,        // gebruiker bevestigde het herkende salaris
+  checksDone: false,      // "even checken"-kaart weggeklikt
 };
-const emptyEnvData = () => ({ tx: [], overrides: {}, goals: [], settings: { ...DEFAULT_SETTINGS } });
+const emptyEnvData = () => ({ tx: [], overrides: {}, goals: [], settings: { ...DEFAULT_SETTINGS }, fixedExclude: {} });
 
 let auth = { accounts: [] };
 let session = null;             // { account, key, rawB64, envId }
@@ -439,7 +443,7 @@ async function decryptJSON(key, blob) {
 }
 
 function normalizeEnvData(d) {
-  return { tx: d.tx || [], overrides: d.overrides || {}, goals: d.goals || [], settings: { ...DEFAULT_SETTINGS, ...(d.settings || {}) } };
+  return { tx: d.tx || [], overrides: d.overrides || {}, goals: d.goals || [], settings: { ...DEFAULT_SETTINGS, ...(d.settings || {}) }, fixedExclude: d.fixedExclude || {} };
 }
 async function registerAccount(name, email, password, password2, remember) {
   email = email.trim().toLowerCase();
@@ -597,7 +601,7 @@ const RULES = [
   // telecom
   [/\bkpn\b|ziggo|odido|t.?mobile|vodafone|tele2|simyo|youfone|lebara|\bben\b(?!\w)|hollandsnieuwe|budget thuis|online\.nl|freedom internet|caiway|delta fiber/i, "telecom"],
   // abonnementen
-  [/netflix|spotify|videoland|disney|hbo|prime video|amazon prime|apple\.com\/bill|apple services|icloud|youtube premium|storytel|audible|npo plus|viaplay|dazn|basic.?fit|sportcity|fit for free|trainmore|onefit|classpass|patreon|linkedin|dropbox|adobe|microsoft 365|playstation|nintendo|xbox|donateurschap|natuurmonumenten|wereld natuur fonds|rode kruis|artsen zonder grenzen|hellofresh|marley spoon|swapfiets/i, "abonnementen"],
+  [/netflix|spotify|videoland|disney|hbo|prime video|amazon prime|apple\.com\/bill|apple services|icloud|youtube premium|storytel|audible|npo plus|viaplay|dazn|basic.?fit|sportcity|fit for free|trainmore|onefit|classpass|patreon|linkedin|dropbox|adobe|microsoft|msbill|openai|chatgpt|anthropic|claude\.ai|google one|playstation|nintendo|xbox|donateurschap|natuurmonumenten|wereld natuur fonds|rode kruis|artsen zonder grenzen|hellofresh|marley spoon|swapfiets|directpakket|betaalpakket|extra rabo|bankkosten|kosten betalen/i, "abonnementen"],
   // vervoer
   [/shell|\besso\b|\bbp\b(?!\w)|total\b|texaco|tango\b|tinq|firezone|gulf\b|avia\b|fastned|allego|vattenfall incharge|shell recharge|\bns\b(?!\w)|ns.?groep|ns reizigers|ov.?chipkaart|ovpay|\bgvb\b|\bret\b(?!\w)|\bhtm\b|arriva|connexxion|keolis|qbuzz|anwb|kwik.?fit|profile|euromaster|garage|apk\b|carwash|parkeren|parking|q.?park|interparking|parkmobile|easypark|yellowbrick|rijkswaterstaat|greenwheels|check\b|felyx|uber\b|bolt\b/i, "vervoer"],
   // boodschappen
@@ -786,6 +790,188 @@ function parseFile(name, text) {
   }).filter(Boolean);
 }
 
+/* ---------- PDF-afschriften (pdf.js, lokaal meegeleverd) ----------
+   PDF's zijn "geprinte" pagina's zonder vaste structuur; deze parser haalt de
+   transactieregels eruit met heuristieken (datum + bedrag per regel, Af/Bij-
+   kolommen of +/- voor het teken). CSV blijft het betrouwbaarst.            */
+let pdfLibPromise = null;
+function loadPdfLib() {
+  if (!pdfLibPromise) pdfLibPromise = new Promise((resolve, reject) => {
+    if (window.pdfjsLib) return resolve(window.pdfjsLib);
+    const s = document.createElement("script");
+    s.src = "lib/pdf.min.js";
+    s.onload = () => {
+      window.pdfjsLib.GlobalWorkerOptions.workerSrc = "lib/pdf.worker.min.js";
+      resolve(window.pdfjsLib);
+    };
+    s.onerror = () => { pdfLibPromise = null; reject(new Error("PDF-lezer kon niet laden")); };
+    document.head.appendChild(s);
+  });
+  return pdfLibPromise;
+}
+async function parsePdf(buf) {
+  const pdfjs = await loadPdfLib();
+  const doc = await pdfjs.getDocument({ data: new Uint8Array(buf) }).promise;
+  const lines = [];
+  let textLen = 0;
+  for (let p = 1; p <= doc.numPages; p++) {
+    const page = await doc.getPage(p);
+    const tc = await page.getTextContent();
+    const rows = [];
+    for (const it of tc.items) {
+      if (!it.str || !it.str.trim()) continue;
+      textLen += it.str.length;
+      const y = it.transform[5];
+      let row = rows.find(r => Math.abs(r.y - y) <= 2.5);
+      if (!row) { row = { y, items: [] }; rows.push(row); }
+      row.items.push({ x: it.transform[4], s: it.str.trim() });
+    }
+    rows.sort((a, b) => b.y - a.y);
+    for (const r of rows) { r.items.sort((a, b) => a.x - b.x); lines.push(r.items); }
+    lines.push(null); // paginagrens
+  }
+  doc.destroy();
+  if (textLen < 40) throw new Error("deze PDF bevat geen leesbare tekst (gescand document?)");
+  return extractTxFromPdfLines(lines);
+}
+function extractTxFromPdfLines(lines) {
+  // Rabobank-rekeningafschriften hebben een eigen layout: datum als dd-mm
+  // zonder jaar, het jaar staat in de "Verwerkingsdatum:"-regel per blok.
+  const isRabo = lines.some(l => l && l.some(it => /naam\/omschrijving/i.test(it.s)) && l.some(it => /bedrag af|debet/i.test(it.s)));
+  if (isRabo) return extractRaboPdf(lines);
+  return extractGenericPdf(lines);
+}
+function extractRaboPdf(lines) {
+  const AMT_RE = /^\d{1,3}(?:\.\d{3})*,\d{2}$/;
+  const HEADERISH = /rekeningafschrift|naam\/omschrijving|tegenrekening|ten name van|iban \/|totaal (af|bij)geschreven|beginsaldo|eindsaldo|datum vanaf|datum tot|rente\b|blad\b|rabo comfort|directpakket periode/i;
+  let afX = null, bijX = null, nameX = 206;
+  const txs = [];
+  let cur = null, lastDate = null;
+  const finalize = date => {
+    if (cur && !date && cur.ddmm && lastDate) {
+      // blok zonder verwerkingsdatum: jaar afleiden van de vorige transactie
+      let y = +lastDate.slice(0, 4);
+      const m = +cur.ddmm.slice(3, 5), lm = +lastDate.slice(5, 7);
+      if (m - lm > 6) y--; else if (lm - m > 6) y++;
+      date = `${y}-${cur.ddmm.slice(3, 5)}-${cur.ddmm.slice(0, 2)}`;
+    }
+    if (cur && date) { cur.date = date; delete cur.ddmm; if (cur.desc) { txs.push(cur); lastDate = date; } }
+    cur = null;
+  };
+  for (const line of lines) {
+    if (!line) continue; // blokken kunnen over een paginagrens lopen
+    for (const it of line) {
+      const t = it.s.toLowerCase();
+      if (/bedrag af|\(debet\)/.test(t)) afX = it.x;
+      if (/bedrag bij|\(credit\)/.test(t)) bijX = it.x;
+      if (/naam\/omschrijving/.test(t)) nameX = it.x;
+    }
+    const full = line.map(i => i.s).join(" ");
+    // "Verwerkingsdatum: dd-mm-jjjj" sluit een transactieblok af en levert de datum
+    const mVerw = full.match(/Verwerkingsdatum:?\s*(\d{2})-(\d{2})-(\d{4})/i);
+    if (mVerw) { finalize(`${mVerw[3]}-${mVerw[2]}-${mVerw[1]}`); continue; }
+    if (HEADERISH.test(full) && !/^\d{2}-\d{2}\b/.test(line[0].s)) continue;
+    // nieuwe transactie: begint links met dd-mm en heeft een bedrag in de af/bij-kolom
+    const startsDdMm = /^\d{2}-\d{2}$/.test(line[0].s.trim()) && line[0].x < 100;
+    const amounts = line.filter(it => AMT_RE.test(it.s.trim()) && it.x > (afX ?? 400) - 40);
+    if (startsDdMm && amounts.length) {
+      finalize(null); // vorig blok zonder verwerkingsdatum: laten vallen
+      const pick = amounts[amounts.length - 1];
+      let amount = parseAmountNL(pick.s);
+      if (isNaN(amount)) continue;
+      const neg = afX != null && bijX != null
+        ? Math.abs(pick.x - afX) <= Math.abs(pick.x - bijX)
+        : pick.x < ((afX ?? 420) + (bijX ?? 509)) / 2 + 40;
+      let ctpIban = "";
+      const descParts = [];
+      for (const it of line) {
+        if (it === pick || AMT_RE.test(it.s.trim())) continue;
+        if (/^\d{2}-\d{2}$/.test(it.s.trim()) || (it.x < nameX - 60 && /^[a-z]{2}$/i.test(it.s.trim()))) continue;
+        if (/^[A-Z]{2}\d{2}\s?[A-Z]{4}/.test(it.s.trim())) { ctpIban = it.s.replace(/\s/g, ""); continue; }
+        if (it.x >= nameX - 20) descParts.push(it.s);
+      }
+      const desc = descParts.join(" ").trim();
+      cur = { date: null, ddmm: line[0].s.trim(), amount: neg ? -Math.abs(amount) : Math.abs(amount), name: desc.slice(0, 48) || "Onbekend", desc, iban: "", ctpIban };
+    } else if (cur) {
+      // vervolgregel: omschrijving aanvullen (alleen de naam/omschrijving-kolom)
+      const extra = line.filter(it => it.x >= nameX - 20 && !AMT_RE.test(it.s.trim())).map(i => i.s).join(" ").trim();
+      if (extra && cur.desc.length < 220 && !/^(\.\s|Transactiereferentie|Machtigingskenmerk|Incassant|Betalingskenm)/i.test(extra)) {
+        cur.desc += " " + extra;
+        if (cur.name === "Onbekend") cur.name = extra.slice(0, 48);
+      }
+    }
+  }
+  finalize(null); // laatste blok afronden
+  // naam opschonen: eerste betekenisvolle woorden van de omschrijving
+  for (const t of txs) t.name = t.name.replace(/\s{2,}/g, " ");
+  return txs;
+}
+function extractGenericPdf(lines) {
+  const AMT_RE = /^[+-]?\s?€?\s?\d{1,3}(?:\.\d{3})*,\d{2}\s?[+-]?$/;
+  const DATE_RE = /^(\d{1,2})[-/](\d{1,2})[-/](\d{4})$|^(\d{4})-(\d{2})-(\d{2})$/;
+  const SKIP_RE = /saldo|totaal|pagina|rekeningafschrift|afschriftnummer|periode|blad\s|www\.|telefoon|kvk|btw/i;
+  const parseDate = tok => {
+    let m = tok.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})$/);
+    if (m) return `${m[3]}-${m[2].padStart(2, "0")}-${m[1].padStart(2, "0")}`;
+    m = tok.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    return m ? `${m[1]}-${m[2]}-${m[3]}` : null;
+  };
+  let afX = null, bijX = null;
+  const txs = [];
+  let cur = null;
+  for (const line of lines) {
+    if (!line) { cur = null; continue; }
+    // kolomkoppen "Af" / "Bij" onthouden voor tekenbepaling
+    for (const it of line) {
+      const t = it.s.toLowerCase();
+      if (t === "af" || t === "af (eur)") afX = it.x;
+      if (t === "bij" || t === "bij (eur)") bijX = it.x;
+    }
+    // tokens: elk item kan meerdere woorden bevatten; splits maar bewaar x
+    const tokens = [];
+    for (const it of line) for (const w of it.s.split(/\s+/)) if (w) tokens.push({ x: it.x, s: w });
+    const full = tokens.map(t => t.s).join(" ");
+    if (SKIP_RE.test(full)) { cur = null; continue; }
+    let date = null;
+    for (const t of tokens) { const d = DATE_RE.test(t.s) && parseDate(t.s); if (d) { date = d; break; } }
+    const amounts = tokens.filter(t => AMT_RE.test(t.s));
+    if (date && amounts.length) {
+      // bij meerdere bedragen (bijv. bedrag + saldo): kies het bedrag het dichtst
+      // bij de Af/Bij-kolommen, anders het eerste
+      let pick = amounts[0];
+      if (afX != null || bijX != null) {
+        pick = amounts.reduce((best, a) => {
+          const d = Math.min(Math.abs(a.x - (afX ?? 1e9)), Math.abs(a.x - (bijX ?? 1e9)));
+          const db = Math.min(Math.abs(best.x - (afX ?? 1e9)), Math.abs(best.x - (bijX ?? 1e9)));
+          return d < db ? a : best;
+        }, amounts[0]);
+      }
+      let amount = parseAmountNL(pick.s.replace(/[+-]\s?$/, m2 => m2.trim()));
+      if (isNaN(amount)) continue;
+      amount = Math.abs(amount);
+      // teken: expliciete +/-, losse Af/Bij-woorden, of kolompositie
+      const raw = pick.s;
+      const words = tokens.map(t => t.s.toLowerCase());
+      let neg;
+      if (/^-|-$/.test(raw.trim())) neg = true;
+      else if (/^\+|\+$/.test(raw.trim())) neg = false;
+      else if (words.includes("af") || words.includes("debet")) neg = true;
+      else if (words.includes("bij") || words.includes("credit")) neg = false;
+      else if (afX != null && bijX != null) neg = Math.abs(pick.x - afX) <= Math.abs(pick.x - bijX);
+      else neg = true; // afschriftregels zijn meestal afschrijvingen
+      const desc = tokens
+        .filter(t => t !== pick && !DATE_RE.test(t.s) && !AMT_RE.test(t.s) && !/^(af|bij|debet|credit)$/i.test(t.s))
+        .map(t => t.s).join(" ").trim();
+      if (!desc) continue;
+      cur = { date, amount: neg ? -amount : amount, name: desc.slice(0, 48), desc, iban: "", ctpIban: "" };
+      txs.push(cur);
+    } else if (cur && !date && !amounts.length && full.length > 1 && cur.desc.length < 200) {
+      cur.desc += " " + full; // vervolgregel van de omschrijving
+    }
+  }
+  return txs;
+}
+
 function txKey(t) {
   return t.date + "|" + t.amount.toFixed(2) + "|" + (t.name + t.desc).toLowerCase().replace(/\s/g, "").slice(0, 40);
 }
@@ -846,9 +1032,9 @@ function analytics() {
     if (!groups.has(t.nkey)) groups.set(t.nkey, { name: t.name || t.nkey, cat: t.cat, txs: [] });
     groups.get(t.nkey).txs.push(t);
   }
-  const fixed = [];
+  const fixed = [], fixedExcluded = [];
   const windowSet = new Set(avgWindow);
-  for (const g of groups.values()) {
+  for (const [gkey, g] of groups) {
     const mks = new Set(g.txs.map(t => monthKey(t.date)));
     const inWindow = [...mks].filter(mk => windowSet.has(mk)).length;
     const need = Math.max(3, Math.ceil(avgWindow.length * 0.7));
@@ -861,11 +1047,32 @@ function analytics() {
       const mean = monthlyTotals.reduce((a, b) => a + b, 0) / monthlyTotals.length;
       const sd = Math.sqrt(monthlyTotals.reduce((a, b) => a + (b - mean) ** 2, 0) / monthlyTotals.length);
       const stable = mean > 0 && sd / mean < 0.45;
-      if (catFixed || (stable && !NEVER_FIXED.has(g.cat))) fixed.push({ name: g.name, cat: g.cat, monthly: median, count: g.txs.length });
+      if (catFixed || (stable && !NEVER_FIXED.has(g.cat))) {
+        const item = { key: gkey, name: g.name, cat: g.cat, monthly: median, count: g.txs.length };
+        if (state.fixedExclude && state.fixedExclude[gkey]) fixedExcluded.push(item);
+        else fixed.push(item);
+      }
     }
   }
   fixed.sort((a, b) => b.monthly - a.monthly);
   const fixedTotal = fixed.reduce((a, f) => a + f.monthly, 0);
+
+  // salarissuggestie: grootste terugkerende inkomstenbron
+  const incGroups = new Map();
+  for (const t of enriched) {
+    if (t.amount <= 0 || t.type === "transfer" || t.type === "saving" || !t.nkey) continue;
+    if (!incGroups.has(t.nkey)) incGroups.set(t.nkey, { name: t.name || t.nkey, txs: [] });
+    incGroups.get(t.nkey).txs.push(t);
+  }
+  let salary = null;
+  for (const g of incGroups.values()) {
+    const mks = [...new Set(g.txs.map(t => monthKey(t.date)))].filter(mk => windowSet.has(mk));
+    if (avgWindow.length >= 2 && mks.length >= Math.max(2, Math.round(avgWindow.length * 0.5))) {
+      const totals = mks.map(mk => g.txs.filter(t => monthKey(t.date) === mk).reduce((a, t) => a + t.amount, 0)).sort((a, b) => a - b);
+      const median = totals[Math.floor(totals.length / 2)] || 0;
+      if (median >= 500 && (!salary || median > salary.monthly)) salary = { name: g.name, monthly: median };
+    }
+  }
 
   // categorie-totalen (gem. p/m over venster)
   const catAvg = {};
@@ -875,7 +1082,7 @@ function analytics() {
   }
 
   const income = state.settings.incomeOverride || avgIncome;
-  cache = { enriched, byMonth, months, avgWindow, avgIncome, avgExpense, avgSaving, fixed, fixedTotal, catAvg, income, ownIbans };
+  cache = { enriched, byMonth, months, avgWindow, avgIncome, avgExpense, avgSaving, fixed, fixedExcluded, fixedTotal, catAvg, income, salary, ownIbans };
   return cache;
 }
 
@@ -1087,6 +1294,43 @@ function chartCats(el, data) {
   attachTooltip(el, data, d => `<b>${esc(d.label)}</b><br>Gem. <b>${fmtEur(d.value)}</b> per maand`);
 }
 
+// vooruitblik: twee lijnen (volgens plan / huidig tempo) + bufferdoel-markering
+function chartForecast(el, data, target) {
+  const W = Math.max(320, el.clientWidth || 600), H = 220;
+  const padL = 46, padR = 8, padT = 10, padB = 22;
+  const iw = W - padL - padR, ih = H - padT - padB;
+  const allV = data.flatMap(d => [d.plan, d.cur]).concat(target ? [target] : []);
+  const maxV = Math.max(100, ...allV) * 1.06;
+  const minV = Math.min(0, ...allV);
+  const y = v => padT + ih - ((v - minV) / (maxV - minV)) * ih;
+  const x = i => padL + (i / (data.length - 1)) * iw;
+  const ticks = niceTicks(maxV);
+  let s = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Verwacht vermogen per maand">`;
+  for (const t of ticks) {
+    if (y(t) < padT) continue;
+    s += `<line x1="${padL}" x2="${W - padR}" y1="${y(t)}" y2="${y(t)}" stroke="var(--grid)" stroke-width="1"/>`;
+    s += `<text x="${padL - 6}" y="${y(t) + 3.5}" text-anchor="end" font-size="10" fill="var(--muted-ink)">${fmtK(t)}</text>`;
+  }
+  if (target) {
+    s += `<line x1="${padL}" x2="${W - padR}" y1="${y(target)}" y2="${y(target)}" stroke="var(--muted-ink)" stroke-width="1"/>`;
+    s += `<text x="${W - padR}" y="${y(target) - 4}" text-anchor="end" font-size="10" fill="var(--muted-ink)">bufferdoel ${fmtK(target)}</text>`;
+  }
+  const line = (key, col) =>
+    `<polyline fill="none" stroke="${col}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" points="${data.map((d, i) => `${x(i)},${y(d[key])}`).join(" ")}"/>`;
+  s += line("cur", "var(--series-alt)");
+  s += line("plan", "var(--series-in)");
+  const lblEvery = Math.ceil(data.length / 6);
+  data.forEach((d, i) => {
+    if (i % lblEvery === 0) s += `<text x="${x(i)}" y="${H - 6}" text-anchor="middle" font-size="10" fill="var(--muted-ink)">${d.label}</text>`;
+    const bw = iw / data.length;
+    s += `<rect class="hit" x="${x(i) - bw / 2}" y="${padT}" width="${bw}" height="${ih}" fill="transparent"/>`;
+  });
+  s += `<line x1="${padL}" x2="${W - padR}" y1="${y(Math.max(0, minV))}" y2="${y(Math.max(0, minV))}" stroke="var(--axis)" stroke-width="1"/></svg>`;
+  el.innerHTML = s;
+  attachTooltip(el, data, d =>
+    `<b>${d.full}</b><br>Volgens plan: <b>${fmtEur(d.plan)}</b><br>Huidig tempo: <b>${fmtEur(d.cur)}</b>`);
+}
+
 /* ---------- views ---------- */
 const TABS = [
   { id: "overzicht", label: "Overzicht", sub: () => dataRangeSub(), icon: '<path d="M4 20V10m6 10V4m6 16v-7" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" fill="none"/>' },
@@ -1259,14 +1503,15 @@ function renderOverzicht() {
       <div class="card empty">
         <div class="big">📊</div>
         <h3>Welkom bij Grip</h3>
-        <p>Upload je bankafschriften (CSV) van de afgelopen maanden of jaren.
+        <p>Upload je bankafschriften (<b>CSV of PDF</b>) van de afgelopen maanden of jaren.
         Grip herkent automatisch bestanden van <b>ING, Rabobank en ABN AMRO</b> en de meeste andere banken.
         Alles blijft op dit apparaat — er wordt niets verstuurd.</p>
         <button class="primary" id="btnImport1">Afschriften uploaden</button>
         <div style="height:10px"></div>
         <button class="secondary" id="btnDemo">Of probeer met voorbeelddata</button>
         <p style="margin-top:16px" class="footnote">Exporteren doe je in je bankieren-app of internetbankieren:
-        kies je rekening → Af-/bijschrijvingen downloaden → <b>CSV</b> → periode (bijv. 2 jaar).</p>
+        kies je rekening → Af-/bijschrijvingen downloaden → <b>CSV</b> → periode (bijv. 2 jaar).
+        Heb je alleen PDF-afschriften? Die kun je ook uploaden — CSV is wel betrouwbaarder.</p>
       </div>`;
     $("#btnImport1").onclick = () => $("#filePick").click();
     $("#btnDemo").onclick = loadDemo;
@@ -1295,6 +1540,31 @@ function renderOverzicht() {
 
   const savRate = a.avgIncome > 0 ? Math.max(0, (a.avgIncome - a.avgExpense) / a.avgIncome) : 0;
 
+  // "even checken": suggesties op basis van je afschriften, met overrule
+  const s = state.settings;
+  const subs = a.fixed.filter(f => f.cat === "abonnementen");
+  const subsTotal = subs.reduce((x, f) => x + f.monthly, 0);
+  const salaryHandled = s.salaryOk || s.incomeOverride != null;
+  const checkCard = (!s.checksDone && a.avgWindow.length >= 2) ? `
+    <div class="card" style="margin-top:12px">
+      <h3 style="margin-bottom:8px">Even checken ✓</h3>
+      ${a.salary && !salaryHandled ? `
+        <p class="footnote" style="font-size:14px;margin-bottom:8px">Klopt het dat je inkomen
+        <b>± ${fmtEur(a.salary.monthly)} per maand</b> is (van “${esc(cap(a.salary.name))}”)?</p>
+        <div style="display:flex;gap:8px;margin-bottom:12px">
+          <button class="small" id="ckSalYes">Klopt</button>
+          <button class="small" id="ckSalNo">Aanpassen</button>
+        </div>
+        <div id="ckSalEdit"></div>`
+      : `<p class="footnote" style="font-size:14px;margin-bottom:8px">We rekenen met een netto inkomen van
+         <b>${fmtEur(a.income)} p/m</b>${s.incomeOverride != null ? " (door jou ingesteld)" : salaryHandled ? " ✓" : " (gemiddelde uit je afschriften)"}.
+         Aanpassen kan bij Instellingen.</p>`}
+      ${subs.length ? `<p class="footnote" style="font-size:14px;margin-bottom:8px">We herkennen
+        <b>${subs.length} abonnement${subs.length === 1 ? "" : "en"}</b> voor samen <b>${fmtEur(subsTotal)} p/m</b>
+        — check ze in de lijst “Vaste lasten” hieronder en tik op ✕ bij wat geen vaste last is.</p>` : ""}
+      <button class="small" id="ckDone">Alles klopt — verberg dit</button>
+    </div>` : "";
+
   el.innerHTML = `
     <div class="kpis">
       <div class="kpi"><div class="lbl">Inkomsten p/m</div><div class="val pos">${fmtEur(a.avgIncome)}</div><div class="sub">gem. laatste ${a.avgWindow.length} mnd</div></div>
@@ -1302,6 +1572,7 @@ function renderOverzicht() {
       <div class="kpi"><div class="lbl">Vaste lasten p/m</div><div class="val">${fmtEur(a.fixedTotal)}</div><div class="sub">${a.fixed.length} terugkerende posten</div></div>
       <div class="kpi"><div class="lbl">Overgehouden</div><div class="val ${savRate > 0.05 ? "pos" : savRate <= 0 ? "neg" : ""}">${Math.round(savRate * 100)}%</div><div class="sub">van je inkomen</div></div>
     </div>
+    ${checkCard}
 
     <h2 class="sec">Inkomsten vs. uitgaven</h2>
     <div class="chart-card">
@@ -1330,14 +1601,26 @@ function renderOverzicht() {
 
     <h2 class="sec">Vaste lasten <span class="badge">${fmtEur(a.fixedTotal)} p/m</span></h2>
     <div class="list">
-      ${a.fixed.slice(0, 14).map(f => `
+      ${a.fixed.slice(0, 20).map(f => `
         <div class="row">
           <div class="emoji">${CATS[f.cat].emoji}</div>
           <div class="grow"><div class="t">${esc(cap(f.name))}</div><div class="d">${CATS[f.cat].label} · ${f.count}×</div></div>
           <div class="amt">${fmtEur(f.monthly)}<span style="font-weight:400;font-size:12px;color:var(--secondary-label)"> p/m</span></div>
+          <button class="small" data-fx="${esc(f.key)}" title="Geen vaste last" aria-label="Geen vaste last" style="padding:5px 10px"><span class="danger">✕</span></button>
         </div>`).join("") || `<div class="row"><div class="grow d">Nog te weinig maanden data om vaste lasten te herkennen (minimaal 3).</div></div>`}
-      ${a.fixed.length > 14 ? `<div class="row"><div class="grow d">+ nog ${a.fixed.length - 14} kleinere posten (samen ${fmtEur(a.fixed.slice(14).reduce((s2, f) => s2 + f.monthly, 0))} p/m)</div></div>` : ""}
+      ${a.fixed.length > 20 ? `<div class="row"><div class="grow d">+ nog ${a.fixed.length - 20} kleinere posten (samen ${fmtEur(a.fixed.slice(20).reduce((s2, f) => s2 + f.monthly, 0))} p/m)</div></div>` : ""}
     </div>
+    ${a.fixedExcluded.length ? `
+    <details class="tbl" style="margin:-4px 4px 12px">
+      <summary>Uitgesloten posten (${a.fixedExcluded.length})</summary>
+      <div class="list" style="margin-top:8px">
+        ${a.fixedExcluded.map(f => `
+          <div class="row">
+            <div class="grow"><div class="t">${esc(cap(f.name))}</div><div class="d">${fmtEur(f.monthly)} p/m</div></div>
+            <button class="small" data-fxr="${esc(f.key)}">Herstel</button>
+          </div>`).join("")}
+      </div>
+    </details>` : ""}
 
     <button class="secondary" id="btnImport2">Nieuwe afschriften uploaden</button>
     <p class="footnote" style="margin-top:10px">Tip: upload elke maand je nieuwe afschrift — dubbele transacties worden automatisch overgeslagen.</p>
@@ -1346,6 +1629,34 @@ function renderOverzicht() {
   chartNet($("#chNet"), net);
   chartCats($("#chCats"), topCats);
   $("#btnImport2").onclick = () => $("#filePick").click();
+  // even-checken-kaart
+  const salYes = $("#ckSalYes");
+  if (salYes) salYes.onclick = () => { state.settings.salaryOk = true; save(); renderOverzicht(); toast("Top — inkomen bevestigd"); };
+  const salNo = $("#ckSalNo");
+  if (salNo) salNo.onclick = () => {
+    $("#ckSalEdit").innerHTML = `
+      <div style="display:flex;gap:8px;margin-bottom:12px">
+        <input type="number" id="ckSalAmt" placeholder="netto p/m" step="50" style="flex:1;max-width:none;text-align:left">
+        <button class="small" id="ckSalSave">Bewaar</button>
+      </div>`;
+    $("#ckSalSave").onclick = () => {
+      const v = +$("#ckSalAmt").value;
+      if (v > 0) { state.settings.incomeOverride = v; save(); renderOverzicht(); toast("Inkomen ingesteld op " + fmtEur(v) + " p/m"); }
+    };
+    $("#ckSalAmt").focus();
+  };
+  const ckDone = $("#ckDone");
+  if (ckDone) ckDone.onclick = () => { state.settings.checksDone = true; save(); renderOverzicht(); };
+  // vaste lasten uitsluiten / herstellen
+  $$("[data-fx]", el).forEach(b => b.onclick = () => {
+    state.fixedExclude[b.dataset.fx] = true;
+    save(); renderOverzicht();
+    toast("Telt niet meer mee als vaste last — herstellen kan onder de lijst");
+  });
+  $$("[data-fxr]", el).forEach(b => b.onclick = () => {
+    delete state.fixedExclude[b.dataset.fxr];
+    save(); renderOverzicht();
+  });
 }
 const byMonthSafe = (a, mk) => a.byMonth.get(mk);
 const fullMonth = mk => { const [y, m] = mk.split("-"); return ["januari","februari","maart","april","mei","juni","juli","augustus","september","oktober","november","december"][+m-1] + " " + y; };
@@ -1363,22 +1674,67 @@ function renderPlan() {
   const varSpend = Math.max(0, a.avgExpense - a.fixedTotal);
   const diff = spendable - varSpend;
 
+  // vooruitblik: verwacht vermogen per maand, in twee tempo's
+  const netCurrent = a.income - a.avgExpense;                 // huidig tempo (gemiddeld overgehouden)
+  const netPlan = goalsM;                                     // volgens plan (bewust opzijgezet)
+  const start = state.settings.currentSavings || 0;
+  const now = new Date();
+  const HORIZON = 36;
+  const fcData = [];
+  for (let m = 0; m <= HORIZON; m++) {
+    const d = new Date(now.getFullYear(), now.getMonth() + m, 1);
+    fcData.push({
+      label: MND[d.getMonth()] + (d.getMonth() === 0 || m === 0 ? " ’" + String(d.getFullYear()).slice(2) : ""),
+      full: fullMonth(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`),
+      plan: Math.round(start + netPlan * m),
+      cur: Math.round(start + netCurrent * m),
+    });
+  }
+  const reachMonth = net => net > 0 ? Math.ceil(Math.max(0, buf.advies - start) / net) : null;
+
   el.innerHTML = `
     <div class="card">
-      <div class="footnote" style="margin-bottom:4px">Vrij te besteden per maand</div>
+      <div class="footnote" style="margin-bottom:4px">Leefgeld per maand</div>
       <div class="hero ${spendable < 0 ? "neg" : ""}">${fmtEur(spendable)}</div>
-      <div class="hero-sub">≈ ${fmtEur(Math.max(0, perWeek))} per week voor boodschappen, uitjes en andere variabele uitgaven</div>
+      <div class="hero-sub">≈ ${fmtEur(Math.max(0, perWeek))} per week voor boodschappen, uitjes en andere variabele uitgaven — wat overblijft na vaste lasten en sparen</div>
       <div style="height:12px"></div>
       <div class="budget-row"><span class="l">Netto inkomen p/m</span><span class="v">${fmtEur(a.income)}</span></div>
       <div class="budget-row"><span class="l">− Vaste lasten</span><span class="v">−${fmtEur(a.fixedTotal)}</span></div>
       <div class="budget-row"><span class="l">− Sparen & potjes (Doelen)</span><span class="v">−${fmtEur(goalsM)}</span></div>
-      <div class="budget-row total"><span class="l">= Vrij te besteden</span><span class="v ${spendable < 0 ? "neg" : ""}">${fmtEur(spendable)}</span></div>
+      <div class="budget-row total"><span class="l">= Leefgeld</span><span class="v ${spendable < 0 ? "neg" : ""}">${fmtEur(spendable)}</span></div>
       <p class="footnote" style="margin-top:10px">
         Je gaf de afgelopen maanden gemiddeld <b>${fmtEur(varSpend)}</b> uit aan variabele kosten —
         ${diff >= 0
           ? `dat past: er blijft dan nog zo’n <b>${fmtEur(diff)}</b> extra over.`
           : `dat is <b class="danger">${fmtEur(-diff)} méér</b> dan dit plan toelaat. Kijk bij “Waar gaat het heen?” waar je kunt bijsturen, of verlaag (tijdelijk) je doelen.`}
       </p>
+    </div>
+
+    <h2 class="sec">Vooruitblik</h2>
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:2px">
+        <div class="footnote">Schuif vooruit in de tijd</div>
+        <div style="font-size:16px;font-weight:700" id="fcWhen"></div>
+      </div>
+      <input type="range" id="fcSlider" min="1" max="${HORIZON}" value="12" step="1"
+        style="width:100%;max-width:none;accent-color:var(--accent);padding:8px 0;background:none">
+      <div id="fcStats"></div>
+      <p class="footnote" style="margin-top:8px">Aannames: je inkomen en uitgavenpatroon blijven zoals de
+      afgelopen ${a.avgWindow.length} maanden, startpunt is je huidige spaarsaldo (${fmtEur(start)},
+      instelbaar bij Instellingen). <b>Volgens plan</b> = je zet elke maand je doelen-bedrag opzij;
+      <b>huidig tempo</b> = wat je nu gemiddeld overhoudt.</p>
+    </div>
+    <div class="chart-card">
+      <div class="chart-title">Verwacht vermogen</div>
+      <div class="legend">
+        <span class="key"><span class="swatch" style="background:var(--series-in)"></span>Volgens plan</span>
+        <span class="key"><span class="swatch" style="background:var(--series-alt)"></span>Huidig tempo</span>
+      </div>
+      <div class="chart-wrap" id="chForecast"></div>
+      <details class="tbl"><summary>Bekijk als tabel</summary><table class="data">
+        <tr><th>Maand</th><th>Volgens plan</th><th>Huidig tempo</th></tr>
+        ${fcData.filter((_, i) => i % 6 === 0 && i > 0).map(d => `<tr><td>${d.full}</td><td>${fmtEur(d.plan)}</td><td>${fmtEur(d.cur)}</td></tr>`).join("")}
+      </table></details>
     </div>
 
     <h2 class="sec">Jouw stappenplan</h2>
@@ -1401,6 +1757,35 @@ function renderPlan() {
     <div class="rule-card"><div class="n">YNAB · Regel 4</div><h3>Laat je geld ouder worden</h3><p>Doel: deze maand leven van het inkomen van vórige maand. Dan ben je nooit meer afhankelijk van de volgende salarisdatum — dat is precies waar je buffer voor is.</p></div>
     <div class="rule-card"><div class="n">Nibud</div><h3>Vuistregels</h3><p>Zet minstens 10% van je netto inkomen opzij. Houd een buffer van 3–6× je maandlasten aan. Reserveer voor onderhoud van je huis ± 1% van de woningwaarde per jaar, en spaar apart voor doelen náást je buffer — de buffer is alleen voor onvoorzien.</p></div>
   `;
+
+  // vooruitblik: schuif + statistieken
+  chartForecast($("#chForecast"), fcData, buf.advies);
+  const renderFcStats = m => {
+    const d = new Date(now.getFullYear(), now.getMonth() + m, 1);
+    $("#fcWhen").textContent = fullMonth(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`);
+    const planV = start + netPlan * m, curV = start + netCurrent * m;
+    const rPlan = reachMonth(netPlan), rCur = reachMonth(netCurrent);
+    const bufTxt = v => {
+      if (start >= buf.advies) return `<span class="pos">buffer is compleet ✓</span>`;
+      const r = v === planV ? rPlan : rCur;
+      if (r == null) return `<span class="danger">buffer wordt zo niet bereikt</span>`;
+      const rd = new Date(now.getFullYear(), now.getMonth() + r, 1);
+      return r <= m ? `<span class="pos">buffer compleet ✓</span>` : `buffer rond ${MND[rd.getMonth()]} ${rd.getFullYear()}`;
+    };
+    const goalRows = state.goals.map(g => {
+      const val = Math.min(g.target, g.current + goalMonthly(g) * m);
+      const done = val >= g.target && g.target > 0;
+      return `<div class="budget-row"><span class="l">${g.emoji} ${esc(g.name)}</span><span class="v ${done ? "pos" : ""}">${done ? "bereikt ✓" : fmtEur(val) + " van " + fmtEur(g.target)}</span></div>`;
+    }).join("");
+    $("#fcStats").innerHTML = `
+      <div class="budget-row"><span class="l">Vermogen volgens plan</span><span class="v ${planV < 0 ? "neg" : ""}">${fmtEur(planV)}</span></div>
+      <div class="budget-row"><span class="l">Vermogen bij huidig tempo</span><span class="v ${curV < 0 ? "neg" : ""}">${fmtEur(curV)}</span></div>
+      <div class="budget-row"><span class="l">Leefgeld per maand</span><span class="v">${fmtEur(spendable)}</span></div>
+      <div class="budget-row"><span class="l">Bufferdoel ${fmtEur(buf.advies)} · huidig tempo</span><span class="v" style="font-weight:500">${bufTxt(curV)}</span></div>
+      ${goalRows ? `<div class="budget-row" style="border-top:none;padding-bottom:2px"><span class="l" style="font-size:13px">Doelen · volgens plan:</span></div>${goalRows}` : ""}`;
+  };
+  renderFcStats(12);
+  $("#fcSlider").oninput = e => renderFcStats(+e.target.value);
 }
 
 /* ----- Doelen ----- */
@@ -1717,19 +2102,27 @@ function exportBackup() {
 $("#filePick").addEventListener("change", async e => {
   const files = [...e.target.files];
   if (!files.length) return;
-  let added = 0, dupes = 0, failed = [];
+  let added = 0, dupes = 0, failed = [], hadPdf = false;
+  if (files.some(f => f.name.toLowerCase().endsWith(".pdf"))) toast("PDF wordt gelezen…");
   for (const f of files) {
     try {
-      const parsed = parseFile(f.name, await f.text());
+      let parsed;
+      if (f.name.toLowerCase().endsWith(".pdf")) {
+        hadPdf = true;
+        parsed = await parsePdf(await f.arrayBuffer());
+      } else {
+        parsed = parseFile(f.name, await f.text());
+      }
       if (!parsed.length) { failed.push(f.name); continue; }
       const r = importTransactions(parsed);
       added += r.added; dupes += r.dupes;
-    } catch (err) { console.error(err); failed.push(f.name); }
+    } catch (err) { console.error(err); failed.push(f.name + (err && err.message ? ` (${err.message})` : "")); }
   }
   e.target.value = "";
   let msg = `${added.toLocaleString("nl-NL")} transacties toegevoegd`;
   if (dupes) msg += `, ${dupes.toLocaleString("nl-NL")} dubbele overgeslagen`;
   if (failed.length) msg += `. Niet herkend: ${failed.join(", ")}`;
+  if (hadPdf && added) msg += ". Tip: PDF-lezen is minder betrouwbaar dan CSV — controleer de aantallen bij Transacties.";
   toast(msg);
   if (added) switchTab("overzicht"); else renderView(activeTab);
 });
