@@ -2086,6 +2086,8 @@ function renderInstellingen() {
     <div class="list">
       <div class="frow"><label>Transacties<div class="hint">${state.tx.length.toLocaleString("nl-NL")} geladen${a.months.length ? ` · ${monthLabel(a.months[0])} t/m ${monthLabel(a.months[a.months.length - 1])}` : ""}</div></label>
         <button class="small" id="btnImp4">Upload CSV</button></div>
+      <div class="frow"><label>Evalueer opnieuw<div class="hint">wist handmatige categorie-correcties, uitgesloten vaste lasten en check-antwoorden — transacties, doelen en situatie blijven staan</div></label>
+        <button class="small" id="btnReeval">Reset</button></div>
       <div class="frow"><label>Reservekopie<div class="hint">alle omgevingen als JSON-bestand</div></label>
         <div style="display:flex;gap:8px"><button class="small" id="btnExport">Exporteer</button><button class="small" id="btnRestore">Herstel</button></div></div>
       <div class="frow"><label class="danger">Account verwijderen<div class="hint">wist dit account en alle gegevens van dit apparaat</div></label>
@@ -2111,6 +2113,17 @@ function renderInstellingen() {
     else { state.settings.balanceStart = +t.value; state.settings.balanceDate = new Date().toISOString().slice(0, 10); }
   });
   $("#btnImp4").onclick = () => $("#filePick").click();
+  $("#btnReeval").onclick = () => {
+    if (!confirm("Grip vergeet dan je handmatige categorie-correcties, uitgesloten vaste lasten, het ingestelde inkomen en je check-antwoorden, en beoordeelt alles opnieuw. Transacties, doelen en je situatie blijven staan. Doorgaan?")) return;
+    state.overrides = {};
+    state.fixedExclude = {};
+    state.settings.incomeOverride = null;
+    state.settings.salaryOk = false;
+    state.settings.checksDone = false;
+    save();
+    switchTab("overzicht");
+    toast("Alles opnieuw beoordeeld — check de suggesties op het Overzicht");
+  };
   $("#btnLogout").onclick = logout;
   $("#sRemember").onchange = e => { setRemember(e.target.checked); toast(e.target.checked ? "Je blijft aangemeld op dit apparaat" : "Automatisch inloggen uitgeschakeld"); };
   $("#btnPwForm").onclick = () => {
