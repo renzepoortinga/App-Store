@@ -41,6 +41,14 @@ Upload je bankafschriften (CSV) en krijg grip op je geld:
   lasten en spaardoelen.
 - **Doelen/potjes**: buffer, auto, kind, onderhoud huis, kleding, vakantie — met
   voorgestelde bedragen, maandbedrag of einddatum, voortgang en haalbaarheidscheck.
+- **Accounts voor het hele gezin**: inloggen met e-mail + wachtwoord. Ieders gegevens
+  worden lokaal versleuteld (PBKDF2 + AES-GCM) met een sleutel uit het eigen wachtwoord —
+  gezinsleden (en de beheerder) kunnen elkaars gegevens dus niet inzien. Er is geen server;
+  het e-mailadres is alleen een inlognaam.
+- **Omgevingen**: per account meerdere administraties, bijv. 👤 Persoonlijk en
+  🏠 Gezamenlijk (voor de en/of-rekening), elk met eigen transacties, doelen en instellingen.
+- **Handleiding**: `apps/finance/handleiding.html` — stap-voor-stap uitleg, inclusief hoe je
+  bij ING, Rabobank en ABN AMRO je afschriften downloadt.
 - **Privacy**: alles draait in de browser; er verlaat niets je apparaat.
   Reservekopie exporteren/herstellen als JSON kan via Instellingen.
 

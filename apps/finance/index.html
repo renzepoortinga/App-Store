@@ -257,15 +257,44 @@ nav.tabbar button.on { color: var(--accent); }
 .rule-card .n { font-size: 12px; font-weight: 700; color: var(--accent); text-transform: uppercase; letter-spacing: .5px; }
 .rule-card p { font-size: 14px; color: var(--secondary-label); line-height: 1.5; margin-top: 4px; }
 .danger { color: var(--red) !important; }
+
+/* omgevingen (persoonlijk / gezamenlijk) */
+.envbar { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+.envpill {
+  border: none; font: inherit; font-size: 14px; font-weight: 600;
+  padding: 7px 15px; border-radius: 999px; cursor: pointer;
+  background: var(--fill); color: var(--secondary-label);
+}
+.envpill.on { background: var(--accent); color: #fff; }
+
+/* inloggen / registreren */
+.login-wrap { max-width: 420px; margin: 0 auto; padding-top: 5vh; }
+.login-logo { width: 84px; height: 84px; border-radius: 20px; display: block; margin: 0 auto 14px; box-shadow: 0 4px 14px rgba(0,0,0,.18); }
+.login-wrap h2.ttl { text-align: center; font-size: 28px; font-weight: 700; }
+.login-wrap .sub { text-align: center; font-size: 15px; color: var(--secondary-label); margin: 6px 0 20px; line-height: 1.45; }
+.field { margin-bottom: 10px; }
+.field input {
+  width: 100%; max-width: none; text-align: left; font-size: 17px;
+  padding: 13px 14px; border-radius: 12px;
+  background: var(--card); border: 1px solid var(--separator); color: var(--label);
+}
+.linkbtn { background: none; border: none; color: var(--accent); font: inherit; font-size: 15px; font-weight: 600; cursor: pointer; padding: 12px; width: 100%; text-align: center; }
+.err { color: var(--red); font-size: 14px; margin: 4px 2px 10px; text-align: center; }
+.remember { display: flex; align-items: center; justify-content: space-between; padding: 4px 2px 14px; font-size: 15px; }
+
 @media (min-width: 640px) { .kpis { grid-template-columns: repeat(4, 1fr); } }
 </style>
 </head>
 <body>
 <div class="wrap">
-  <header class="app">
+  <header class="app" id="appHeader">
     <h1 id="viewTitle">Overzicht</h1>
     <div class="subtitle" id="viewSub"></div>
+    <div class="envbar" id="envbar"></div>
   </header>
+
+  <!-- ============ INLOGGEN ============ -->
+  <section id="view-login" class="view"></section>
 
   <!-- ============ OVERZICHT ============ -->
   <section id="view-overzicht" class="view on"></section>
@@ -311,8 +340,16 @@ function toast(msg) {
   clearTimeout(toastTimer); toastTimer = setTimeout(() => (t.style.display = "none"), 3200);
 }
 
-/* ---------- state & storage ---------- */
-const STORE_KEY = "grip.v1";
+/* ---------- accounts, versleuteling & opslag ----------
+   Elk account versleutelt zijn eigen gegevens (AES-GCM) met een sleutel die
+   uit het wachtwoord wordt afgeleid (PBKDF2). Zonder het wachtwoord is de
+   data van een ander gezinslid dus niet te lezen — ook niet door de beheerder
+   van dit apparaat of deze website. Er is geen server: het e-mailadres is
+   alleen een inlognaam, er worden geen e-mails verstuurd.                  */
+const ACC_KEY = "grip.accounts.v1";
+const DATA_PREFIX = "grip.data.";
+const SES_KEY = "grip.session.v1";
+const LEGACY_KEY = "grip.v1";
 const DEFAULT_SETTINGS = {
   incomeOverride: null,   // netto maandinkomen; null = uit data
   housing: "huur",        // huur | koop
@@ -322,26 +359,157 @@ const DEFAULT_SETTINGS = {
   currentSavings: 0,      // huidig spaarsaldo (buffer)
   expensiveDebt: 0,       // dure schulden (excl. hypotheek/studieschuld)
 };
-let state = { tx: [], overrides: {}, goals: [], settings: { ...DEFAULT_SETTINGS } };
+const emptyEnvData = () => ({ tx: [], overrides: {}, goals: [], settings: { ...DEFAULT_SETTINGS } });
 
-function load() {
-  try {
-    const raw = localStorage.getItem(STORE_KEY);
-    if (raw) {
-      const s = JSON.parse(raw);
-      state = {
-        tx: s.tx || [],
-        overrides: s.overrides || {},
-        goals: s.goals || [],
-        settings: { ...DEFAULT_SETTINGS, ...(s.settings || {}) },
-      };
-    }
-  } catch (e) { console.warn("load failed", e); }
+let auth = { accounts: [] };
+let session = null;             // { account, key, rawB64, envId }
+let store = null;               // { envs: [{id,name,emoji}], data: { envId: envData } }
+let state = emptyEnvData();     // actieve omgeving (verwijst naar store.data[envId])
+
+function loadAccounts() {
+  try { auth = JSON.parse(localStorage.getItem(ACC_KEY)) || { accounts: [] }; }
+  catch (e) { auth = { accounts: [] }; }
+  if (!Array.isArray(auth.accounts)) auth = { accounts: [] };
 }
+function saveAccounts() { localStorage.setItem(ACC_KEY, JSON.stringify(auth)); }
+
+const _te = new TextEncoder(), _td = new TextDecoder();
+function b64(buf) { const u = new Uint8Array(buf); let s = ""; for (let i = 0; i < u.length; i++) s += String.fromCharCode(u[i]); return btoa(s); }
+const unb64 = s => Uint8Array.from(atob(s), c => c.charCodeAt(0));
+async function deriveRaw(password, saltB64) {
+  const km = await crypto.subtle.importKey("raw", _te.encode(password), "PBKDF2", false, ["deriveBits"]);
+  const bits = await crypto.subtle.deriveBits({ name: "PBKDF2", salt: unb64(saltB64), iterations: 310000, hash: "SHA-256" }, km, 256);
+  return new Uint8Array(bits);
+}
+const keyFromRaw = raw => crypto.subtle.importKey("raw", raw, "AES-GCM", false, ["encrypt", "decrypt"]);
+async function makeVerifier(raw, saltB64) {
+  const salt = unb64(saltB64);
+  const buf = new Uint8Array(raw.length + salt.length);
+  buf.set(raw); buf.set(salt, raw.length);
+  return b64(await crypto.subtle.digest("SHA-256", buf));
+}
+async function encryptJSON(key, obj) {
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const ct = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, _te.encode(JSON.stringify(obj)));
+  return { v: 1, iv: b64(iv), ct: b64(ct) };
+}
+async function decryptJSON(key, blob) {
+  const pt = await crypto.subtle.decrypt({ name: "AES-GCM", iv: unb64(blob.iv) }, key, unb64(blob.ct));
+  return JSON.parse(_td.decode(pt));
+}
+
+function normalizeEnvData(d) {
+  return { tx: d.tx || [], overrides: d.overrides || {}, goals: d.goals || [], settings: { ...DEFAULT_SETTINGS, ...(d.settings || {}) } };
+}
+async function registerAccount(name, email, password, password2, remember) {
+  email = email.trim().toLowerCase();
+  if (!/^\S+@\S+\.\S+$/.test(email)) throw new Error("Vul een geldig e-mailadres in.");
+  if (password.length < 8) throw new Error("Kies een wachtwoord van minimaal 8 tekens.");
+  if (password !== password2) throw new Error("De wachtwoorden zijn niet gelijk.");
+  if (auth.accounts.some(a => a.email === email)) throw new Error("Er bestaat op dit apparaat al een account met dit e-mailadres.");
+  const salt = b64(crypto.getRandomValues(new Uint8Array(16)));
+  const raw = await deriveRaw(password, salt);
+  const acc = {
+    id: "a" + Date.now().toString(36) + Math.random().toString(36).slice(2, 7),
+    name: (name || "").trim() || email.split("@")[0],
+    email, salt,
+    verifier: await makeVerifier(raw, salt),
+  };
+  store = {
+    envs: [{ id: "p", name: "Persoonlijk", emoji: "👤" }, { id: "g", name: "Gezamenlijk", emoji: "🏠" }],
+    data: { p: emptyEnvData(), g: emptyEnvData() },
+  };
+  // gegevens van vóór de account-update (onversleuteld) meenemen naar het eerste account
+  if (auth.accounts.length === 0) {
+    try {
+      const legacy = JSON.parse(localStorage.getItem(LEGACY_KEY));
+      if (legacy && legacy.tx) { store.data.p = normalizeEnvData(legacy); localStorage.removeItem(LEGACY_KEY); }
+    } catch (e) {}
+  }
+  auth.accounts.push(acc); saveAccounts();
+  session = { account: acc, key: await keyFromRaw(raw), rawB64: b64(raw), envId: "p" };
+  await persistNow();
+  setRemember(remember);
+}
+async function loginAccount(email, password, remember) {
+  email = email.trim().toLowerCase();
+  const acc = auth.accounts.find(a => a.email === email);
+  if (!acc) throw new Error("Geen account met dit e-mailadres op dit apparaat. Nieuw hier? Maak een account.");
+  const raw = await deriveRaw(password, acc.salt);
+  if (await makeVerifier(raw, acc.salt) !== acc.verifier) throw new Error("Onjuist wachtwoord.");
+  const key = await keyFromRaw(raw);
+  store = await loadStore(acc.id, key);
+  session = { account: acc, key, rawB64: b64(raw), envId: store.envs[0].id };
+  setRemember(remember);
+}
+async function loadStore(accId, key) {
+  const rawBlob = localStorage.getItem(DATA_PREFIX + accId);
+  if (!rawBlob) return { envs: [{ id: "p", name: "Persoonlijk", emoji: "👤" }], data: { p: emptyEnvData() } };
+  const s = await decryptJSON(key, JSON.parse(rawBlob));
+  for (const e of s.envs) s.data[e.id] = normalizeEnvData(s.data[e.id] || {});
+  return s;
+}
+function setRemember(remember) {
+  if (remember) localStorage.setItem(SES_KEY, JSON.stringify({ accountId: session.account.id, rawKey: session.rawB64 }));
+  else localStorage.removeItem(SES_KEY);
+}
+async function tryAutoLogin() {
+  try {
+    const s = JSON.parse(localStorage.getItem(SES_KEY));
+    if (!s) return false;
+    const acc = auth.accounts.find(a => a.id === s.accountId);
+    if (!acc) return false;
+    const key = await keyFromRaw(unb64(s.rawKey));
+    store = await loadStore(acc.id, key);
+    session = { account: acc, key, rawB64: s.rawKey, envId: store.envs[0].id };
+    return true;
+  } catch (e) { return false; }
+}
+async function changePassword(oldPw, newPw, newPw2) {
+  const acc = session.account;
+  const oldRaw = await deriveRaw(oldPw, acc.salt);
+  if (await makeVerifier(oldRaw, acc.salt) !== acc.verifier) throw new Error("Huidig wachtwoord is onjuist.");
+  if (newPw.length < 8) throw new Error("Kies een nieuw wachtwoord van minimaal 8 tekens.");
+  if (newPw !== newPw2) throw new Error("De nieuwe wachtwoorden zijn niet gelijk.");
+  const salt = b64(crypto.getRandomValues(new Uint8Array(16)));
+  const raw = await deriveRaw(newPw, salt);
+  acc.salt = salt; acc.verifier = await makeVerifier(raw, salt);
+  session.key = await keyFromRaw(raw); session.rawB64 = b64(raw);
+  saveAccounts();
+  await persistNow();
+  if (localStorage.getItem(SES_KEY)) setRemember(true);
+}
+function logout() {
+  localStorage.removeItem(SES_KEY);
+  session = null; store = null; state = emptyEnvData();
+  invalidate(); showLogin();
+}
+function deleteAccount() {
+  localStorage.removeItem(DATA_PREFIX + session.account.id);
+  auth.accounts = auth.accounts.filter(a => a.id !== session.account.id);
+  saveAccounts(); logout();
+}
+
+function setEnv(envId) {
+  if (!store || !store.data[envId]) return;
+  session.envId = envId;
+  state = store.data[envId];
+  txFilter = { month: "", cat: "", q: "" };
+  invalidate(); renderEnvbar(); switchTab(activeTab);
+}
+function currentEnv() { return store.envs.find(e => e.id === session.envId); }
+
+let saveTimer = null;
 function save() {
-  try { localStorage.setItem(STORE_KEY, JSON.stringify(state)); }
-  catch (e) { toast("Opslaan mislukt — opslag vol?"); }
   invalidate();
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => persistNow().catch(() => toast("Opslaan mislukt")), 150);
+}
+async function persistNow() {
+  if (!session || !store) return;
+  const blob = await encryptJSON(session.key, store);
+  try { localStorage.setItem(DATA_PREFIX + session.account.id, JSON.stringify(blob)); }
+  catch (e) { toast("Opslaan mislukt — opslag vol?"); }
 }
 
 /* ---------- categorieën ---------- */
@@ -903,6 +1071,7 @@ function renderTabbar() {
   $$("#tabbar button").forEach(b => b.addEventListener("click", () => switchTab(b.dataset.tab)));
 }
 function switchTab(id) {
+  if (!session) return showLogin();
   activeTab = id;
   $$(".view").forEach(v => v.classList.remove("on"));
   $("#view-" + id).classList.add("on");
@@ -912,6 +1081,87 @@ function switchTab(id) {
   $("#viewSub").textContent = tab.sub();
   renderView(id);
   window.scrollTo({ top: 0 });
+}
+
+/* ----- inloggen / registreren ----- */
+let loginMode = "login";
+function showLogin() {
+  $("#tabbar").style.display = "none";
+  $("#appHeader").style.display = "none";
+  $$(".view").forEach(v => v.classList.remove("on"));
+  $("#view-login").classList.add("on");
+  loginMode = auth.accounts.length ? "login" : "register";
+  renderLogin();
+}
+function enterApp() {
+  $("#tabbar").style.display = "";
+  $("#appHeader").style.display = "";
+  state = store.data[session.envId];
+  invalidate(); renderEnvbar();
+  switchTab("overzicht");
+}
+function renderLogin(err) {
+  const reg = loginMode === "register";
+  const el = $("#view-login");
+  el.innerHTML = `
+    <div class="login-wrap">
+      <img class="login-logo" src="icons/icon-180.png" alt="">
+      <h2 class="ttl">${reg ? "Account aanmaken" : "Welkom bij Grip"}</h2>
+      <p class="sub">Jouw gegevens worden op dit apparaat <b>versleuteld met je wachtwoord</b>.
+      Niemand anders kan erbij — ook andere gebruikers van deze app niet.</p>
+      ${auth.accounts.length && !reg ? `<div class="list" style="margin-bottom:14px">${auth.accounts.map(a => `
+        <div class="row" style="cursor:pointer" data-email="${esc(a.email)}">
+          <div class="emoji">👤</div>
+          <div class="grow"><div class="t">${esc(a.name)}</div><div class="d">${esc(a.email)}</div></div>
+        </div>`).join("")}</div>` : ""}
+      ${err ? `<div class="err">${esc(err)}</div>` : ""}
+      ${reg ? `<div class="field"><input type="text" id="liName" placeholder="Je naam" autocomplete="name"></div>` : ""}
+      <div class="field"><input type="email" id="liEmail" placeholder="E-mailadres" autocomplete="username" inputmode="email"></div>
+      <div class="field"><input type="password" id="liPw" placeholder="Wachtwoord" autocomplete="${reg ? "new-password" : "current-password"}"></div>
+      ${reg ? `<div class="field"><input type="password" id="liPw2" placeholder="Herhaal wachtwoord" autocomplete="new-password"></div>` : ""}
+      <div class="remember"><span>Aangemeld blijven op dit apparaat</span>
+        <span class="switch"><input type="checkbox" id="liRemember" checked><span></span></span></div>
+      <button class="primary" id="liGo">${reg ? "Maak account" : "Log in"}</button>
+      <button class="linkbtn" id="liSwitch">${reg ? "Ik heb al een account — log in" : "Nieuw hier? Maak een account"}</button>
+      <p class="footnote" style="text-align:center">
+        Er is geen server en er worden geen e-mails verstuurd: je e-mailadres is alleen je inlognaam.
+        <b>Wachtwoord vergeten = gegevens kwijt</b> (zo is je privacy gegarandeerd) — maak dus af en toe
+        een reservekopie via Instellingen. <a href="handleiding.html">Lees de handleiding</a>.
+      </p>
+    </div>`;
+  $$("[data-email]", el).forEach(r => r.onclick = () => { $("#liEmail").value = r.dataset.email; $("#liPw").focus(); });
+  $("#liSwitch").onclick = () => { loginMode = reg ? "login" : "register"; renderLogin(); };
+  const submit = async () => {
+    const btn = $("#liGo"); btn.disabled = true; btn.textContent = "Even geduld…";
+    try {
+      if (reg) await registerAccount($("#liName").value, $("#liEmail").value, $("#liPw").value, $("#liPw2").value, $("#liRemember").checked);
+      else await loginAccount($("#liEmail").value, $("#liPw").value, $("#liRemember").checked);
+      enterApp();
+    } catch (e) { renderLogin(e.message || "Er ging iets mis."); }
+  };
+  $("#liGo").onclick = submit;
+  el.querySelectorAll("input").forEach(i => i.addEventListener("keydown", e => { if (e.key === "Enter") submit(); }));
+}
+
+/* ----- omgevingen ----- */
+function renderEnvbar() {
+  const bar = $("#envbar");
+  if (!session || !store) { bar.innerHTML = ""; return; }
+  bar.innerHTML = store.envs.map(e =>
+    `<button class="envpill ${e.id === session.envId ? "on" : ""}" data-env="${e.id}">${e.emoji} ${esc(e.name)}</button>`
+  ).join("") + (store.envs.length < 5 ? `<button class="envpill" id="envAdd" aria-label="Omgeving toevoegen">+</button>` : "");
+  $$("[data-env]", bar).forEach(b => b.onclick = () => setEnv(b.dataset.env));
+  const add = $("#envAdd");
+  if (add) add.onclick = addEnvironment;
+}
+function addEnvironment() {
+  const name = (prompt("Naam van de nieuwe omgeving (bijv. Gezamenlijk, Bedrijf):") || "").trim();
+  if (!name) return;
+  const id = "e" + Date.now().toString(36);
+  store.envs.push({ id, name: name.slice(0, 20), emoji: /gezamen|samen|huis/i.test(name) ? "🏠" : "📁" });
+  store.data[id] = emptyEnvData();
+  save(); setEnv(id);
+  toast(`Omgeving “${name}” aangemaakt`);
 }
 
 function renderView(id) {
@@ -1249,8 +1499,31 @@ function renderInstellingen() {
   const el = $("#view-instellingen");
   const s = state.settings;
   const a = analytics();
+  const remembered = !!localStorage.getItem(SES_KEY);
   el.innerHTML = `
-    <h2 class="sec" style="margin-top:6px">Jouw situatie</h2>
+    <h2 class="sec" style="margin-top:6px">Account</h2>
+    <div class="list">
+      <div class="frow"><label>${esc(session.account.name)}<div class="hint">${esc(session.account.email)}</div></label>
+        <button class="small" id="btnLogout">Log uit</button></div>
+      <div class="frow"><label>Aangemeld blijven<div class="hint">automatisch inloggen op dit apparaat</div></label>
+        <span class="switch"><input type="checkbox" id="sRemember" ${remembered ? "checked" : ""}><span></span></span></div>
+      <div class="frow"><label>Wachtwoord wijzigen</label><button class="small" id="btnPwForm">Wijzig</button></div>
+    </div>
+    <div id="pwForm"></div>
+
+    <h2 class="sec">Omgevingen</h2>
+    <p class="footnote" style="margin-bottom:10px">Elke omgeving is een eigen administratie — bijv. <b>Persoonlijk</b> voor je eigen rekening en <b>Gezamenlijk</b> voor de en/of-rekening. Wissel bovenaan het scherm.</p>
+    <div class="list">
+      ${store.envs.map(e2 => `
+        <div class="frow"><label>${e2.emoji} ${esc(e2.name)}<div class="hint">${(store.data[e2.id].tx || []).length.toLocaleString("nl-NL")} transacties</div></label>
+          <div style="display:flex;gap:8px">
+            <button class="small" data-envren="${e2.id}">Hernoem</button>
+            ${store.envs.length > 1 ? `<button class="small" data-envdel="${e2.id}"><span class="danger">Wis</span></button>` : ""}
+          </div></div>`).join("")}
+      <div class="frow"><label>Nieuwe omgeving</label><button class="small" id="btnAddEnv">Voeg toe</button></div>
+    </div>
+
+    <h2 class="sec" style="margin-top:6px">Jouw situatie <span class="badge">${currentEnv().emoji} ${esc(currentEnv().name)}</span></h2>
     <p class="footnote" style="margin-bottom:10px">Hiermee berekent Grip je bufferadvies en bestedingsruimte.</p>
     <div class="list">
       <div class="frow"><label>Netto inkomen p/m<div class="hint">leeg = uit je afschriften (${fmtEur(a.avgIncome)})</div></label>
@@ -1269,12 +1542,12 @@ function renderInstellingen() {
     <div class="list">
       <div class="frow"><label>Transacties<div class="hint">${state.tx.length.toLocaleString("nl-NL")} geladen${a.months.length ? ` · ${monthLabel(a.months[0])} t/m ${monthLabel(a.months[a.months.length - 1])}` : ""}</div></label>
         <button class="small" id="btnImp4">Upload CSV</button></div>
-      <div class="frow"><label>Reservekopie<div class="hint">alles als JSON-bestand</div></label>
+      <div class="frow"><label>Reservekopie<div class="hint">alle omgevingen als JSON-bestand</div></label>
         <div style="display:flex;gap:8px"><button class="small" id="btnExport">Exporteer</button><button class="small" id="btnRestore">Herstel</button></div></div>
-      <div class="frow"><label class="danger">Alles wissen<div class="hint">verwijdert alle data van dit apparaat</div></label>
+      <div class="frow"><label class="danger">Account verwijderen<div class="hint">wist dit account en alle gegevens van dit apparaat</div></label>
         <button class="small" id="btnWipe"><span class="danger">Wis</span></button></div>
     </div>
-    <p class="footnote">🔒 <b>Privacy:</b> Grip is een lokale app. Je afschriften en gegevens staan alleen in de opslag van deze browser op dit apparaat en verlaten het nooit. Grip geeft inzicht en vuistregels (Nibud, YNAB) — het is geen financieel advies.</p>
+    <p class="footnote">🔒 <b>Privacy:</b> Grip is een lokale app zonder server. Je afschriften en gegevens staan alleen op dit apparaat, <b>versleuteld met jouw wachtwoord</b> — andere gebruikers van deze app kunnen er niet bij. Wachtwoord vergeten = gegevens niet terug te halen, dus exporteer af en toe een reservekopie. Grip geeft inzicht en vuistregels (Nibud, YNAB) — het is geen financieel advies. <a href="handleiding.html">Handleiding</a>.</p>
   `;
   const bind = (id, fn) => { $(id).onchange = e => { fn(e.target); save(); renderInstellingen(); }; };
   bind("#sIncome", t => state.settings.incomeOverride = t.value === "" ? null : Math.max(0, +t.value));
@@ -1289,6 +1562,38 @@ function renderInstellingen() {
   });
   bind("#sDebt", t => state.settings.expensiveDebt = Math.max(0, +t.value || 0));
   $("#btnImp4").onclick = () => $("#filePick").click();
+  $("#btnLogout").onclick = logout;
+  $("#sRemember").onchange = e => { setRemember(e.target.checked); toast(e.target.checked ? "Je blijft aangemeld op dit apparaat" : "Automatisch inloggen uitgeschakeld"); };
+  $("#btnPwForm").onclick = () => {
+    $("#pwForm").innerHTML = `
+      <div class="list">
+        <div class="frow"><label>Huidig wachtwoord</label><input type="password" id="pwOld" autocomplete="current-password"></div>
+        <div class="frow"><label>Nieuw wachtwoord</label><input type="password" id="pwNew" autocomplete="new-password"></div>
+        <div class="frow"><label>Herhaal nieuw</label><input type="password" id="pwNew2" autocomplete="new-password"></div>
+      </div>
+      <button class="primary" id="pwSave">Bewaar nieuw wachtwoord</button>`;
+    $("#pwSave").onclick = async () => {
+      try { await changePassword($("#pwOld").value, $("#pwNew").value, $("#pwNew2").value); toast("Wachtwoord gewijzigd"); renderInstellingen(); }
+      catch (e) { toast(e.message); }
+    };
+  };
+  $$("[data-envren]", el).forEach(b => b.onclick = () => {
+    const env = store.envs.find(e2 => e2.id === b.dataset.envren);
+    const name = (prompt("Nieuwe naam voor deze omgeving:", env.name) || "").trim();
+    if (!name) return;
+    env.name = name.slice(0, 20); save(); renderEnvbar(); renderInstellingen();
+  });
+  $$("[data-envdel]", el).forEach(b => b.onclick = () => {
+    const env = store.envs.find(e2 => e2.id === b.dataset.envdel);
+    if (!confirm(`Omgeving “${env.name}” en alle transacties, doelen en instellingen erin definitief wissen?`)) return;
+    store.envs = store.envs.filter(e2 => e2.id !== env.id);
+    delete store.data[env.id];
+    if (session.envId === env.id) session.envId = store.envs[0].id;
+    state = store.data[session.envId];
+    save(); renderEnvbar(); renderInstellingen();
+    toast(`Omgeving “${env.name}” gewist`);
+  });
+  $("#btnAddEnv").onclick = () => { addEnvironment(); renderInstellingen(); };
   $("#btnExport").onclick = exportBackup;
   $("#btnRestore").onclick = () => {
     const inp = document.createElement("input");
@@ -1296,23 +1601,33 @@ function renderInstellingen() {
     inp.onchange = async () => {
       try {
         const data = JSON.parse(await inp.files[0].text());
-        if (!data || !Array.isArray(data.tx)) throw new Error("geen geldig bestand");
-        state = { tx: data.tx, overrides: data.overrides || {}, goals: data.goals || [], settings: { ...DEFAULT_SETTINGS, ...(data.settings || {}) } };
-        save(); switchTab("overzicht"); toast("Reservekopie hersteld");
+        if (data && data.type === "grip-backup" && Array.isArray(data.envs)) {
+          if (!confirm("Deze reservekopie vervangt alle huidige omgevingen van dit account. Doorgaan?")) return;
+          store.envs = data.envs;
+          store.data = {};
+          for (const e2 of data.envs) store.data[e2.id] = normalizeEnvData((data.data || {})[e2.id] || {});
+          session.envId = store.envs[0].id;
+          state = store.data[session.envId];
+        } else if (data && Array.isArray(data.tx)) {
+          // oude reservekopie (één administratie) → in de huidige omgeving
+          store.data[session.envId] = normalizeEnvData(data);
+          state = store.data[session.envId];
+        } else throw new Error("geen geldig Grip-bestand");
+        save(); renderEnvbar(); switchTab("overzicht"); toast("Reservekopie hersteld");
       } catch (e) { toast("Herstellen mislukt: " + e.message); }
     };
     inp.click();
   };
   $("#btnWipe").onclick = () => {
-    if (confirm("Weet je zeker dat je ALLE gegevens van dit apparaat wilt wissen?")) {
-      localStorage.removeItem(STORE_KEY);
-      state = { tx: [], overrides: {}, goals: [], settings: { ...DEFAULT_SETTINGS } };
-      invalidate(); switchTab("overzicht"); toast("Alle gegevens gewist");
+    if (confirm(`Account ${session.account.email} en ALLE bijbehorende gegevens definitief van dit apparaat verwijderen?`)) {
+      deleteAccount();
+      toast("Account verwijderd");
     }
   };
 }
 function exportBackup() {
-  const blob = new Blob([JSON.stringify(state, null, 1)], { type: "application/json" });
+  const payload = { type: "grip-backup", version: 2, account: session.account.email, envs: store.envs, data: store.data };
+  const blob = new Blob([JSON.stringify(payload, null, 1)], { type: "application/json" });
   const aEl = document.createElement("a");
   aEl.href = URL.createObjectURL(blob);
   aEl.download = "grip-backup-" + new Date().toISOString().slice(0, 10) + ".json";
@@ -1394,11 +1709,14 @@ function loadDemo() {
 }
 
 /* ---------- init ---------- */
-load();
+loadAccounts();
 renderTabbar();
-switchTab("overzicht");
+(async () => {
+  if (await tryAutoLogin()) enterApp();
+  else showLogin();
+})();
 let rsz;
-window.addEventListener("resize", () => { clearTimeout(rsz); rsz = setTimeout(() => renderView(activeTab), 200); });
+window.addEventListener("resize", () => { clearTimeout(rsz); rsz = setTimeout(() => { if (session) renderView(activeTab); }, 200); });
 if ("serviceWorker" in navigator && location.protocol === "https:") {
   navigator.serviceWorker.register("sw.js").catch(() => {});
 }
