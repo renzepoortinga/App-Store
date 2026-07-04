@@ -1,18 +1,19 @@
 # Persoonlijke App Store
 
-Een eigen app store naar het idee van Naval Ravikant — [*A Return to Code*](https://nav.al/code):
-laat AI-coding-agents complete, persoonlijke apps voor je bouwen en lever ze via één webpagina
-rechtstreeks op je telefoon. Geen App Store-review, geen server, geen accounts —
-elke app is een zelfstandige web-app en **alle data blijft lokaal op je eigen apparaat**.
+Een eigen app store: zelfgebouwde apps voor het hele gezin, geleverd via één webpagina
+rechtstreeks op je telefoon. Geen server, geen tussenpartijen — elke app is een
+zelfstandige web-app en **alle data blijft lokaal op je eigen apparaat**.
 
 ## Hoe het werkt
 
-- **`index.html`** is de "App Store": een overzichtspagina met alle apps.
+- **`index.html`** is de "App Store": een startpagina in echte App Store-stijl met
+  een uitgelicht-kaart, "Geïnstalleerd" en "Alle apps", zelf ook installeerbaar als app.
 - Elke app leeft in **`apps/<naam>/`** als één zelfstandig HTML-bestand (plus een
   webmanifest, service worker en iconen zodat hij als PWA installeerbaar is).
-- Publiceer de repo via **GitHub Pages** (Settings → Pages → deploy from branch `main`, root).
-- Open de pagina op je iPhone → open een app → deelknop → **"Zet op beginscherm"**.
-  De app gedraagt zich daarna als een gewone app en werkt offline.
+- Publicatie gaat automatisch via GitHub Actions naar **GitHub Pages** bij elke push naar `main`.
+- Installeren: de store en de apps tonen een **Installeer-knop** — op Android opent die
+  het echte installatievenster; op iPhone/iPad toont hij de twee stappen via de deelknop
+  (Apple staat directe installatie door websites niet toe).
 
 ## Een nieuwe app toevoegen
 

@@ -3,11 +3,16 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Persoonlijke App Store</title>
-<meta name="description" content="Mijn persoonlijke app store — zelfgebouwde apps, rechtstreeks op je telefoon.">
+<title>App Store</title>
+<meta name="description" content="Onze eigen App Store — apps voor het hele gezin, rechtstreeks op je telefoon.">
 <meta name="theme-color" content="#f2f2f7" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
-<link rel="icon" href='data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect width="100" height="100" rx="22" fill="%230a84ff"/><text x="50" y="68" font-size="52" text-anchor="middle" fill="white" font-family="-apple-system,sans-serif">A</text></svg>'>
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="App Store">
+<link rel="apple-touch-icon" href="icons/store-180.png">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href='data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="%234da2ff"/><stop offset="1" stop-color="%230b5fd0"/></linearGradient></defs><rect width="100" height="100" rx="22" fill="url(%23g)"/><path d="M50 26 38 47h24zM33.5 55l-6 10.5h45L66.5 55zM56 47l6 10.5 6-10.5-6-10.5z" fill="white"/></svg>'>
 <style>
   :root {
     --bg: #f2f2f7;
@@ -37,104 +42,282 @@
     font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, "Segoe UI", sans-serif;
     background: var(--bg);
     color: var(--label);
-    padding: max(env(safe-area-inset-top), 16px) 16px max(env(safe-area-inset-bottom), 32px);
+    padding: max(env(safe-area-inset-top), 12px) 16px max(env(safe-area-inset-bottom), 40px);
     max-width: 720px;
     margin: 0 auto;
     -webkit-font-smoothing: antialiased;
   }
-  header { padding: 32px 4px 20px; }
+  header { display: flex; align-items: flex-end; justify-content: space-between; padding: 28px 4px 14px; }
   .date {
     font-size: 13px; font-weight: 600; letter-spacing: 0.4px;
     text-transform: uppercase; color: var(--secondary-label);
   }
   h1 { font-size: 34px; font-weight: 700; letter-spacing: 0.37px; margin-top: 2px; }
-  .app-card {
-    display: flex; align-items: center; gap: 14px;
-    background: var(--card); border-radius: 16px;
-    padding: 14px; margin-bottom: 12px;
-    text-decoration: none; color: inherit;
-    transition: transform 0.12s ease;
+  .avatar {
+    width: 38px; height: 38px; border-radius: 19px; flex-shrink: 0; margin-bottom: 4px;
+    background: linear-gradient(180deg, #4da2ff, #0b5fd0);
+    color: #fff; font-size: 18px; font-weight: 700;
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 1px 3px rgba(0,0,0,.2);
   }
-  .app-card:active { transform: scale(0.98); }
-  .app-icon {
-    width: 60px; height: 60px; border-radius: 14px; flex-shrink: 0;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.12);
+
+  /* uitgelicht (hero) */
+  .hero {
+    display: block; position: relative; overflow: hidden;
+    border-radius: 20px; margin-bottom: 26px;
+    background: linear-gradient(160deg, #4da2ff 0%, #1d6fe0 55%, #0b4fb0 100%);
+    color: #fff; text-decoration: none;
+    padding: 18px 18px 16px;
+    box-shadow: 0 10px 24px rgba(11, 95, 208, 0.28);
   }
-  .app-info { flex: 1; min-width: 0; }
-  .app-name { font-size: 17px; font-weight: 600; }
-  .app-subtitle {
-    font-size: 14px; color: var(--secondary-label); margin-top: 1px;
-    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  .hero .kicker { font-size: 12px; font-weight: 700; letter-spacing: 0.8px; text-transform: uppercase; opacity: .85; }
+  .hero .title { font-size: 26px; font-weight: 800; margin-top: 2px; letter-spacing: .2px; }
+  .hero .tag { font-size: 15px; opacity: .92; margin-top: 3px; max-width: 30ch; line-height: 1.35; }
+  .hero .bottom { display: flex; align-items: center; gap: 12px; margin-top: 20px; }
+  .hero .bottom img { width: 48px; height: 48px; border-radius: 11px; box-shadow: 0 2px 6px rgba(0,0,0,.25); }
+  .hero .bottom .grow { flex: 1; min-width: 0; }
+  .hero .bottom .n { font-size: 15px; font-weight: 700; }
+  .hero .bottom .s { font-size: 12px; opacity: .85; }
+  .hero .btn {
+    background: rgba(255,255,255,0.28); color: #fff;
+    font-size: 15px; font-weight: 700; border: none; border-radius: 999px;
+    padding: 7px 20px; backdrop-filter: blur(6px);
   }
-  .open-btn {
+
+  /* secties */
+  .section-title { font-size: 22px; font-weight: 700; margin: 26px 4px 4px; }
+  .section-sub { font-size: 13px; color: var(--secondary-label); margin: 0 4px 10px; }
+  .applist { background: var(--card); border-radius: 16px; overflow: hidden; }
+  .approw {
+    display: flex; align-items: center; gap: 13px;
+    padding: 12px 14px; text-decoration: none; color: inherit;
+    transition: background .1s ease;
+  }
+  .approw:active { background: var(--fill); }
+  .approw + .approw { border-top: 0.5px solid var(--separator); }
+  .approw img { width: 62px; height: 62px; border-radius: 14px; flex-shrink: 0; box-shadow: 0 1px 3px rgba(0,0,0,.12); }
+  .approw .grow { flex: 1; min-width: 0; }
+  .approw .name { font-size: 16px; font-weight: 600; }
+  .approw .sub {
+    font-size: 13px; color: var(--secondary-label); margin-top: 1px;
+    overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+  }
+  .approw .cat { font-size: 11px; color: var(--tertiary-label); margin-top: 2px; text-transform: uppercase; letter-spacing: .3px; font-weight: 600; }
+  .getbtn {
     background: var(--fill); color: var(--accent);
-    font-size: 15px; font-weight: 700;
+    font-family: inherit; font-size: 15px; font-weight: 700;
     border: none; border-radius: 999px; padding: 6px 18px;
-    flex-shrink: 0;
+    flex-shrink: 0; min-width: 86px; text-align: center;
   }
-  .section-title {
-    font-size: 20px; font-weight: 700; margin: 28px 4px 12px;
-  }
-  .howto {
+  .empty-note {
     background: var(--card); border-radius: 16px; padding: 18px 16px;
-    font-size: 15px; line-height: 1.45; color: var(--secondary-label);
+    font-size: 14px; color: var(--secondary-label); line-height: 1.5;
   }
-  .howto strong { color: var(--label); }
-  .howto ol { margin: 10px 0 0 20px; }
-  .howto li { margin-bottom: 8px; }
-  .howto li:last-child { margin-bottom: 0; }
-  footer {
-    text-align: center; font-size: 13px; color: var(--tertiary-label);
-    margin-top: 36px;
+  footer { text-align: center; font-size: 12px; color: var(--tertiary-label); margin-top: 40px; line-height: 1.6; }
+
+  /* installeer-banner */
+  .install-banner {
+    display: flex; align-items: center; gap: 12px;
+    background: var(--card); border-radius: 16px; padding: 12px 14px; margin-bottom: 14px;
   }
+  .install-banner img { width: 44px; height: 44px; border-radius: 10px; }
+  .install-banner .grow { flex: 1; min-width: 0; }
+  .install-banner .t { font-size: 15px; font-weight: 600; }
+  .install-banner .s { font-size: 12px; color: var(--secondary-label); }
+  .install-banner .x { background: none; border: none; color: var(--tertiary-label); font-size: 20px; padding: 4px 6px; cursor: pointer; }
+
+  /* installatie-instructies (iOS) */
+  .sheet-backdrop {
+    position: fixed; inset: 0; background: rgba(0,0,0,.4); z-index: 40;
+    display: none; align-items: flex-end; justify-content: center;
+  }
+  .sheet-backdrop.on { display: flex; }
+  .sheet {
+    background: var(--bg); border-radius: 20px 20px 0 0; width: 100%; max-width: 720px;
+    padding: 20px 20px calc(24px + env(safe-area-inset-bottom));
+    animation: up .25s ease;
+  }
+  @keyframes up { from { transform: translateY(40px); opacity: 0; } to { transform: none; opacity: 1; } }
+  .sheet h3 { font-size: 20px; font-weight: 700; margin-bottom: 4px; }
+  .sheet .sub2 { font-size: 14px; color: var(--secondary-label); margin-bottom: 14px; }
+  .sheet .step { display: flex; align-items: center; gap: 12px; background: var(--card); border-radius: 12px; padding: 12px 14px; margin-bottom: 8px; font-size: 15px; }
+  .sheet .step .n2 { width: 26px; height: 26px; border-radius: 13px; background: var(--accent); color: #fff; font-size: 14px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .sheet .step svg { width: 22px; height: 22px; flex-shrink: 0; color: var(--accent); }
+  .sheet .close { width: 100%; margin-top: 10px; background: var(--fill); color: var(--accent); font: inherit; font-size: 16px; font-weight: 600; border: none; border-radius: 12px; padding: 13px; cursor: pointer; }
 </style>
 </head>
 <body>
 <header>
-  <div class="date" id="today"></div>
-  <h1>App Store</h1>
+  <div>
+    <div class="date" id="today"></div>
+    <h1>App Store</h1>
+  </div>
+  <div class="avatar" aria-hidden="true">R</div>
 </header>
 
-<main id="apps"></main>
+<div id="installSlot"></div>
 
-<h2 class="section-title">Nieuwe app toevoegen</h2>
-<div class="howto">
-  <strong>Zo werkt deze persoonlijke app store</strong> — geïnspireerd op
-  <a href="https://nav.al/code" style="color:var(--accent);text-decoration:none">Naval's “A Return to Code”</a>.
-  Elke app is een zelfstandige web-app in dit repository; er is geen server en je data blijft op je eigen apparaat.
-  <ol>
-    <li><strong>Vraag een AI-agent (Claude Code) een app te bouwen</strong> in een nieuwe map <code>apps/&lt;naam&gt;/</code> — één zelfstandig HTML-bestand, zonder externe afhankelijkheden.</li>
-    <li><strong>Voeg de app toe</strong> aan de lijst in <code>index.html</code> (het <code>APPS</code>-array onderaan).</li>
-    <li><strong>Publiceer</strong> via GitHub Pages en open deze pagina op je iPhone.</li>
-    <li><strong>Installeer:</strong> open een app → deel-knop → <em>“Zet op beginscherm”</em>. De app werkt daarna als een gewone app, ook offline.</li>
-  </ol>
+<div id="heroSlot"></div>
+
+<div id="installedSection" style="display:none">
+  <h2 class="section-title">Geïnstalleerd</h2>
+  <p class="section-sub">Apps die je op dit apparaat gebruikt</p>
+  <div class="applist" id="installedList"></div>
 </div>
 
-<footer>Gebouwd met AI-agents · data blijft lokaal op je apparaat</footer>
+<h2 class="section-title">Alle apps</h2>
+<p class="section-sub">Beschikbaar voor het hele gezin</p>
+<div class="applist" id="allList"></div>
+
+<footer>
+  Apps draaien volledig op je eigen apparaat — je gegevens verlaten het nooit.
+</footer>
+
+<div class="sheet-backdrop" id="sheet">
+  <div class="sheet">
+    <h3 id="sheetTitle">Installeer</h3>
+    <p class="sub2">Op een iPhone of iPad installeer je apps zo (dit kan alleen via Safari):</p>
+    <div class="step"><span class="n2">1</span>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M8 6.5 12 3l4 3.5"/><path d="M6 10H5a1 1 0 0 0-1 1v9a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-9a1 1 0 0 0-1-1h-1"/></svg>
+      <span>Tik onderaan op de <b>deelknop</b></span></div>
+    <div class="step"><span class="n2">2</span>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="4" y="4" width="16" height="16" rx="4"/><path d="M12 9v6M9 12h6"/></svg>
+      <span>Kies <b>“Zet op beginscherm”</b></span></div>
+    <div class="step"><span class="n2">3</span>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m5 13 4 4 10-10"/></svg>
+      <span>Tik op <b>“Voeg toe”</b> — klaar!</span></div>
+    <button class="close" id="sheetClose">Sluit</button>
+  </div>
+</div>
 
 <script>
 const APPS = [
   {
+    id: "grip",
     name: "Grip",
-    subtitle: "Financieel dashboard — accounts voor het hele gezin",
+    subtitle: "Financieel dashboard met plan, doelen en gezinsaccounts",
+    category: "Financiën",
     href: "apps/finance/",
     icon: "apps/finance/icons/icon-180.png",
+    featured: true,
+    tagline: "Krijg grip op je geld: inzicht, een plan en spaardoelen.",
   },
 ];
 
-const fmt = new Intl.DateTimeFormat("nl-NL", { weekday: "long", day: "numeric", month: "long" });
+const INSTALLED_KEY = "store.installed.v1";
+const getInstalled = () => { try { return JSON.parse(localStorage.getItem(INSTALLED_KEY)) || []; } catch (e) { return []; } };
+const markInstalled = id => {
+  const list = getInstalled();
+  if (!list.includes(id)) { list.push(id); localStorage.setItem(INSTALLED_KEY, JSON.stringify(list)); }
+};
+
+const fmt = new Intl.DateTimeFormat("nl-NL", { weekday: "long", d: undefined, day: "numeric", month: "long" });
 document.getElementById("today").textContent = fmt.format(new Date());
 
-document.getElementById("apps").innerHTML = APPS.map(app => `
-  <a class="app-card" href="${app.href}">
-    <img class="app-icon" src="${app.icon}" alt="" width="60" height="60">
-    <div class="app-info">
-      <div class="app-name">${app.name}</div>
-      <div class="app-subtitle">${app.subtitle}</div>
+function open(app) { markInstalled(app.id); location.href = app.href; }
+
+function row(app, installed) {
+  const a = document.createElement("a");
+  a.className = "approw";
+  a.href = app.href;
+  a.innerHTML = `
+    <img src="${app.icon}" alt="" width="62" height="62">
+    <div class="grow">
+      <div class="name">${app.name}</div>
+      <div class="sub">${app.subtitle}</div>
+      <div class="cat">${app.category}</div>
     </div>
-    <span class="open-btn">Openen</span>
-  </a>
-`).join("");
+    <span class="getbtn">${installed ? "Open" : "Download"}</span>`;
+  a.addEventListener("click", e => { e.preventDefault(); open(app); });
+  return a;
+}
+
+function render() {
+  const installed = getInstalled();
+
+  const featured = APPS.find(a => a.featured);
+  if (featured) {
+    const isInst = installed.includes(featured.id);
+    const hero = document.createElement("a");
+    hero.className = "hero";
+    hero.href = featured.href;
+    hero.innerHTML = `
+      <div class="kicker">Uitgelicht</div>
+      <div class="title">${featured.name}</div>
+      <div class="tag">${featured.tagline}</div>
+      <div class="bottom">
+        <img src="${featured.icon}" alt="">
+        <div class="grow"><div class="n">${featured.name}</div><div class="s">${featured.category}</div></div>
+        <span class="btn">${isInst ? "Open" : "Download"}</span>
+      </div>`;
+    hero.addEventListener("click", e => { e.preventDefault(); open(featured); });
+    const slot = document.getElementById("heroSlot");
+    slot.innerHTML = ""; slot.appendChild(hero);
+  }
+
+  const instApps = APPS.filter(a => installed.includes(a.id));
+  const instSection = document.getElementById("installedSection");
+  const instList = document.getElementById("installedList");
+  instList.innerHTML = "";
+  if (instApps.length) {
+    instSection.style.display = "";
+    instApps.forEach(a => instList.appendChild(row(a, true)));
+  } else instSection.style.display = "none";
+
+  const allList = document.getElementById("allList");
+  allList.innerHTML = "";
+  APPS.forEach(a => allList.appendChild(row(a, installed.includes(a.id))));
+}
+render();
+
+/* ---------- App Store zelf installeren ---------- */
+const isStandalone = window.matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
+const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+const DISMISS_KEY = "store.installDismissed.v1";
+let deferredPrompt = null;
+
+window.addEventListener("beforeinstallprompt", e => {
+  e.preventDefault();
+  deferredPrompt = e;
+  renderInstallBanner();
+});
+window.addEventListener("appinstalled", () => { deferredPrompt = null; document.getElementById("installSlot").innerHTML = ""; });
+
+function renderInstallBanner() {
+  const slot = document.getElementById("installSlot");
+  if (isStandalone || localStorage.getItem(DISMISS_KEY)) { slot.innerHTML = ""; return; }
+  if (!deferredPrompt && !isIOS) { slot.innerHTML = ""; return; }
+  slot.innerHTML = `
+    <div class="install-banner">
+      <img src="icons/store-180.png" alt="">
+      <div class="grow">
+        <div class="t">Op je beginscherm zetten</div>
+        <div class="s">Eigen icoon, opent als echte app</div>
+      </div>
+      <button class="getbtn" id="btnInstallStore">Installeer</button>
+      <button class="x" id="btnDismiss" aria-label="Verberg">✕</button>
+    </div>`;
+  document.getElementById("btnInstallStore").onclick = () => installFlow("de App Store");
+  document.getElementById("btnDismiss").onclick = () => { localStorage.setItem(DISMISS_KEY, "1"); renderInstallBanner(); };
+}
+async function installFlow(name) {
+  if (deferredPrompt) {                    // Android / Chrome: echte installatieprompt
+    deferredPrompt.prompt();
+    await deferredPrompt.userChoice;
+    deferredPrompt = null;
+    renderInstallBanner();
+  } else {                                 // iOS: Apple staat alleen de deelknop-route toe
+    document.getElementById("sheetTitle").textContent = "Installeer " + name;
+    document.getElementById("sheet").classList.add("on");
+  }
+}
+document.getElementById("sheetClose").onclick = () => document.getElementById("sheet").classList.remove("on");
+document.getElementById("sheet").addEventListener("click", e => { if (e.target.id === "sheet") e.currentTarget.classList.remove("on"); });
+renderInstallBanner();
+
+if ("serviceWorker" in navigator && location.protocol === "https:") {
+  navigator.serviceWorker.register("sw.js").catch(() => {});
+}
 </script>
 </body>
 </html>
