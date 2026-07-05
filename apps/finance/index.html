@@ -1687,11 +1687,17 @@ function renderEnvbar() {
   const add = $("#envAdd");
   if (add) add.onclick = addEnvironment;
 }
+function envEmoji(name, fallback) {
+  if (/gezamen|samen|huis|gezin/i.test(name)) return "🏠";
+  if (/persoonlijk|priv|eigen/i.test(name)) return "👤";
+  if (/bedrijf|zaak|zzp|onderneming/i.test(name)) return "💼";
+  return fallback || "📁";
+}
 function addEnvironment() {
-  const name = (prompt("Naam van de nieuwe omgeving (bijv. Gezamenlijk, Bedrijf):") || "").trim();
+  const name = (prompt("Naam van de nieuwe omgeving (bijv. Persoonlijk, Gezamenlijk, Bedrijf):") || "").trim();
   if (!name) return;
   const id = "e" + Date.now().toString(36);
-  store.envs.push({ id, name: name.slice(0, 20), emoji: /gezamen|samen|huis/i.test(name) ? "🏠" : "📁" });
+  store.envs.push({ id, name: name.slice(0, 20), emoji: envEmoji(name) });
   store.data[id] = emptyEnvData();
   save(); setEnv(id);
   toast(`Omgeving “${name}” aangemaakt`);
@@ -2536,7 +2542,9 @@ function renderInstellingen() {
     const env = store.envs.find(e2 => e2.id === b.dataset.envren);
     const name = (prompt("Nieuwe naam voor deze omgeving:", env.name) || "").trim();
     if (!name) return;
-    env.name = name.slice(0, 20); save(); renderEnvbar(); renderInstellingen();
+    env.name = name.slice(0, 20);
+    env.emoji = envEmoji(name, env.emoji);
+    save(); renderEnvbar(); renderInstellingen();
   });
   $$("[data-envdel]", el).forEach(b => b.onclick = () => {
     const env = store.envs.find(e2 => e2.id === b.dataset.envdel);
