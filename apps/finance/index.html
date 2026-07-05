@@ -418,7 +418,7 @@ const DEFAULT_SETTINGS = {
   checksDone: false,      // "even checken"-kaart weggeklikt
   ownNames: "",           // eigen namen/IBAN's (komma-gescheiden): bijschrijvingen hiervan = interne overboeking
 };
-const emptyEnvData = () => ({ tx: [], overrides: {}, goals: [], settings: { ...DEFAULT_SETTINGS }, fixedExclude: {}, manualFixed: [], budgets: {} });
+const emptyEnvData = () => ({ tx: [], overrides: {}, goals: [], settings: { ...DEFAULT_SETTINGS }, fixedExclude: {}, manualFixed: [], budgets: {}, incomeInclude: {} });
 
 let auth = { accounts: [] };
 let session = null;             // { account, key, rawB64, envId }
@@ -458,7 +458,7 @@ async function decryptJSON(key, blob) {
 }
 
 function normalizeEnvData(d) {
-  return { tx: d.tx || [], overrides: d.overrides || {}, goals: d.goals || [], settings: { ...DEFAULT_SETTINGS, ...(d.settings || {}) }, fixedExclude: d.fixedExclude || {}, manualFixed: d.manualFixed || [], budgets: d.budgets || {} };
+  return { tx: d.tx || [], overrides: d.overrides || {}, goals: d.goals || [], settings: { ...DEFAULT_SETTINGS, ...(d.settings || {}) }, fixedExclude: d.fixedExclude || {}, manualFixed: d.manualFixed || [], budgets: d.budgets || {}, incomeInclude: d.incomeInclude || {} };
 }
 async function registerAccount(name, email, password, password2, remember) {
   email = email.trim().toLowerCase();
@@ -1146,20 +1146,53 @@ function analytics() {
   }
   let salary = null, structuralIncome = 0;
   const incomeFixed = [];
-  for (const g of incGroups.values()) {
+  for (const [gkey, g] of incGroups) {
     const mks = [...new Set(g.txs.map(t => monthKey(t.date)))].filter(mk => windowSet.has(mk));
     if (avgWindow.length >= 2 && mks.length >= Math.max(2, Math.round(avgWindow.length * 0.5))) {
       const totals = mks.map(mk => g.txs.filter(t => monthKey(t.date) === mk).reduce((a, t) => a + t.amount, 0)).sort((a, b) => a - b);
       const median = totals[Math.floor(totals.length / 2)] || 0;
       if (median >= 25) {
-        structuralIncome += median; // structureel = som van terugkerende bronnen (loon, toeslagen, …)
+        structuralIncome += median; // som van álle terugkerende bronnen
         const days = g.txs.map(t => +t.date.slice(8, 10)).sort((x, y) => x - y);
-        incomeFixed.push({ name: g.name, cat: g.txs[0].cat, monthly: median, day: days[Math.floor(days.length / 2)], count: g.txs.length });
+        incomeFixed.push({ key: gkey, name: g.name, cat: g.txs[0].cat, monthly: median, day: days[Math.floor(days.length / 2)], count: g.txs.length });
       }
-      if (median >= 500 && (!salary || median > salary.monthly)) salary = { name: g.name, monthly: median };
+      if (median >= 500 && (!salary || median > salary.monthly)) salary = { key: gkey, name: g.name, monthly: median };
     }
   }
   incomeFixed.sort((a, b) => b.monthly - a.monthly);
+  // vast inkomen = waar je standaard op kunt rekenen: standaard alleen je loon,
+  // per bron aan/uit te zetten. Al het andere (vakantiegeld, terugbetalingen,
+  // incidentele bijschrijvingen) telt als "extra" en is per maand zichtbaar.
+  const includedKeys = new Set();
+  for (const f of incomeFixed) {
+    const pref = state.incomeInclude ? state.incomeInclude[f.key] : undefined;
+    f.included = pref != null ? pref : !!(salary && f.key === salary.key);
+    if (f.included) includedKeys.add(f.key);
+  }
+  const incomeBase = incomeFixed.filter(f => f.included).reduce((s2, f) => s2 + f.monthly, 0);
+  const extraByMonth = new Map();
+  const addExtra = (mk, amount, item) => {
+    if (!extraByMonth.has(mk)) extraByMonth.set(mk, { total: 0, items: [] });
+    const e = extraByMonth.get(mk);
+    e.total += amount; e.items.push(item);
+  };
+  for (const t of enriched) {
+    if (t.amount <= 0 || t.type === "transfer" || t.type === "saving") continue;
+    if (includedKeys.has(t.nkey)) continue;
+    addExtra(monthKey(t.date), t.amount, t);
+  }
+  // vakantiegeld/13e maand: het deel bóven je vaste loon van een meetellende bron is óók extra
+  for (const f of incomeFixed) {
+    if (!f.included) continue;
+    const g = incGroups.get(f.key);
+    if (!g) continue;
+    const perMk = new Map();
+    for (const t of g.txs) { const mk = monthKey(t.date); perMk.set(mk, (perMk.get(mk) || 0) + t.amount); }
+    for (const [mk, tot] of perMk) {
+      const diff = tot - f.monthly;
+      if (diff > 25) addExtra(mk, diff, { name: cap(f.name) + " — boven je vaste loon (bijv. vakantiegeld)", amount: diff });
+    }
+  }
 
   // categorie-totalen (gem. p/m over venster)
   const catAvg = {};
@@ -1168,8 +1201,8 @@ function analytics() {
     for (const [c, v] of Object.entries(m.cats)) catAvg[c] = (catAvg[c] || 0) + v / avgWindow.length;
   }
 
-  const income = state.settings.incomeOverride || avgIncome;
-  cache = { enriched, byMonth, months, avgWindow, avgIncome, avgExpense, avgSaving, fixed, fixedExcluded, fixedTotal, fixedKeys, regelingen, catAvg, income, salary, structuralIncome, incomeFixed, ownIbans };
+  const income = state.settings.incomeOverride ?? (incomeBase || avgIncome);
+  cache = { enriched, byMonth, months, avgWindow, avgIncome, avgExpense, avgSaving, fixed, fixedExcluded, fixedTotal, fixedKeys, regelingen, catAvg, income, incomeBase, extraByMonth, salary, structuralIncome, incomeFixed, ownIbans };
   return cache;
 }
 
@@ -1721,18 +1754,18 @@ function renderOverzicht() {
     <div class="card" style="margin-top:12px">
       <h3 style="margin-bottom:8px">Even checken ✓</h3>
       ${a.salary && !salaryHandled ? `
-        <p class="footnote" style="font-size:14px;margin-bottom:8px">Klopt het dat je structurele inkomen
-        <b>± ${fmtEur(a.structuralIncome)} per maand</b> is?
-        Grootste bron: “${esc(cap(a.salary.name))}” (± ${fmtEur(a.salary.monthly)} p/m).
-        Losse bijschrijvingen zoals terugbetalingen tellen hier niet in mee.</p>
+        <p class="footnote" style="font-size:14px;margin-bottom:8px">Klopt het dat je vaste inkomen
+        <b>± ${fmtEur(a.incomeBase)} per maand</b> is (“${esc(cap(a.salary.name))}”)?
+        Alleen inkomen waar je standaard op kunt rekenen telt mee — vakantiegeld, toeslagen en
+        losse bijschrijvingen zie je apart bij “Extra binnengekomen”.</p>
         <div style="display:flex;gap:8px;margin-bottom:12px">
           <button class="small" id="ckSalYes">Klopt — reken hiermee</button>
           <button class="small" id="ckSalNo">Aanpassen</button>
         </div>
         <div id="ckSalEdit"></div>`
-      : `<p class="footnote" style="font-size:14px;margin-bottom:8px">We rekenen met een netto inkomen van
-         <b>${fmtEur(a.income)} p/m</b>${s.incomeOverride != null ? " (door jou ingesteld)" : salaryHandled ? " ✓" : " (gemiddelde uit je afschriften)"}.
-         Aanpassen kan bij Instellingen.</p>`}
+      : `<p class="footnote" style="font-size:14px;margin-bottom:8px">We rekenen met een vast inkomen van
+         <b>${fmtEur(a.income)} p/m</b>${s.incomeOverride != null ? " (door jou ingesteld)" : " (je loon uit de afschriften)"}.
+         Aanpassen kan bij Instellingen of via de schakelaars bij Vaste inkomsten.</p>`}
       ${subs.length ? `<p class="footnote" style="font-size:14px;margin-bottom:8px">We herkennen
         <b>${subs.length} abonnement${subs.length === 1 ? "" : "en"}</b> voor samen <b>${fmtEur(subsTotal)} p/m</b>
         — check ze in de lijst “Vaste lasten” hieronder en tik op ✕ bij wat geen vaste last is.</p>` : ""}
@@ -1741,7 +1774,7 @@ function renderOverzicht() {
 
   el.innerHTML = `
     <div class="kpis">
-      <div class="kpi"><div class="lbl">Inkomsten p/m</div><div class="val pos">${fmtEur(a.avgIncome)}</div><div class="sub">gem. laatste ${a.avgWindow.length} mnd</div></div>
+      <div class="kpi"><div class="lbl">Vast inkomen p/m</div><div class="val pos">${fmtEur(a.income)}</div><div class="sub">waar je op kunt rekenen</div></div>
       <div class="kpi"><div class="lbl">Uitgaven p/m</div><div class="val">${fmtEur(a.avgExpense)}</div><div class="sub">gem. laatste ${a.avgWindow.length} mnd</div></div>
       <div class="kpi"><div class="lbl">Vaste lasten p/m</div><div class="val">${fmtEur(a.fixedTotal)}</div><div class="sub">${a.fixed.length} terugkerende posten</div></div>
       <div class="kpi"><div class="lbl">Overgehouden</div><div class="val ${savRate > 0.05 ? "pos" : savRate <= 0 ? "neg" : ""}">${Math.round(savRate * 100)}%</div><div class="sub">van je inkomen</div></div>
@@ -1778,15 +1811,35 @@ function renderOverzicht() {
     </div>
 
     ${a.incomeFixed.length ? `
-    <h2 class="sec">Vaste inkomsten <span class="badge">${fmtEur(a.incomeFixed.reduce((s2, f) => s2 + f.monthly, 0))} p/m</span></h2>
+    <h2 class="sec">Vaste inkomsten <span class="badge">${fmtEur(a.incomeBase)} p/m</span></h2>
+    <p class="footnote" style="margin:-4px 4px 10px">Alleen aangevinkte bronnen tellen mee als vast inkomen — dat is waar je plan en leefgeld op rekenen.</p>
     <div class="list">
       ${a.incomeFixed.map(f => `
         <div class="row">
           <div class="emoji">${CATS[f.cat].emoji}</div>
-          <div class="grow"><div class="t">${esc(cap(f.name))}</div><div class="d">rond de ${f.day}e · ${CATS[f.cat].label}</div></div>
-          <div class="amt pos">+${fmtEur(f.monthly)}<span style="font-weight:400;font-size:12px;color:var(--secondary-label)"> p/m</span></div>
+          <div class="grow"><div class="t">${esc(cap(f.name))}</div><div class="d">rond de ${f.day}e · ${CATS[f.cat].label}${f.included ? "" : " · telt niet mee"}</div></div>
+          <div class="amt pos" style="${f.included ? "" : "opacity:.45"}">+${fmtEur(f.monthly)}<span style="font-weight:400;font-size:12px;color:var(--secondary-label)"> p/m</span></div>
+          <label class="switch" style="transform:scale(.8);margin:-4px"><input type="checkbox" data-inc="${esc(f.key)}" ${f.included ? "checked" : ""}><span></span></label>
         </div>`).join("")}
     </div>` : ""}
+
+    ${a.extraByMonth && a.extraByMonth.size ? (() => {
+      const mks2 = [...a.extraByMonth.keys()].sort().reverse().slice(0, 6);
+      return `
+    <h2 class="sec">Extra binnengekomen</h2>
+    <p class="footnote" style="margin:-4px 4px 10px">Alles buiten je vaste inkomen — vakantiegeld, terugbetalingen, verkopen. Telt niet mee in je plan, zodat je alleen rekent op wat zeker is.</p>
+    <div class="list">
+      ${mks2.map(mk2 => {
+        const e = a.extraByMonth.get(mk2);
+        const names = e.items.slice(0, 2).map(t => cap(t.name).slice(0, 22)).join(", ");
+        return `
+        <div class="row">
+          <div class="grow"><div class="t">${fullMonth(mk2)}</div><div class="d">${esc(names)}${e.items.length > 2 ? ` +${e.items.length - 2} meer` : ""}</div></div>
+          <div class="amt pos">+${fmtEur(e.total)}</div>
+        </div>`;
+      }).join("")}
+    </div>`;
+    })() : ""}
 
     <h2 class="sec">Vaste lasten & abonnementen <span class="badge">${fmtEur(a.fixedTotal)} p/m</span></h2>
     <div class="list">
@@ -1849,11 +1902,17 @@ function renderOverzicht() {
   // even-checken-kaart
   const salYes = $("#ckSalYes");
   if (salYes) salYes.onclick = () => {
-    state.settings.salaryOk = true;
-    state.settings.incomeOverride = Math.round(a.structuralIncome);
+    state.settings.salaryOk = true; // basis is al je vaste inkomen; geen override nodig
     save(); renderOverzicht();
-    toast("We rekenen nu met " + fmtEur(Math.round(a.structuralIncome)) + " p/m — aanpasbaar bij Instellingen");
+    toast("We rekenen met je vaste inkomen: " + fmtEur(Math.round(a.incomeBase)) + " p/m");
   };
+  // vaste-inkomstenbron aan/uit als rekenbasis
+  $$("[data-inc]", el).forEach(sw => sw.onchange = () => {
+    state.incomeInclude = state.incomeInclude || {};
+    state.incomeInclude[sw.dataset.inc] = sw.checked;
+    save(); renderOverzicht();
+    toast(sw.checked ? "Telt mee als vast inkomen" : "Telt niet meer mee — zie Extra binnengekomen");
+  });
   const salNo = $("#ckSalNo");
   if (salNo) salNo.onclick = () => {
     $("#ckSalEdit").innerHTML = `
@@ -2121,8 +2180,11 @@ function renderDoelen() {
         <h3>${fullMonth(mk)}</h3>
         <button class="small" id="bmNext" ${mk >= curMk ? "disabled style='opacity:.4'" : ""}>›</button>
       </div>
-      <div class="budget-row"><span class="l">Inkomen</span><span class="v">${fmtEur(a.income)}</span></div>
+      <div class="budget-row"><span class="l">Vast inkomen</span><span class="v">${fmtEur(a.income)}</span></div>
       <div class="budget-row"><span class="l">− Vaste lasten & regelingen</span><span class="v">−${fmtEur(a.fixedTotal)}</span></div>
+      ${a.extraByMonth && a.extraByMonth.get(mk) ? `
+      <div class="budget-row"><span class="l">Extra binnengekomen deze maand</span><span class="v pos">+${fmtEur(a.extraByMonth.get(mk).total)}</span></div>
+      <p class="footnote" style="margin-top:6px">Extra geld (vakantiegeld, terugbetalingen) telt niet mee in de verdeling — zet het bewust bij een potje of laat het staan als buffer.</p>` : ""}
     </div>
     <div class="list">${POTS.map(potRow).join("")}</div>
     <div class="card">
@@ -2365,8 +2427,8 @@ function renderInstellingen() {
     <h2 class="sec" style="margin-top:6px">Jouw situatie <span class="badge">${currentEnv().emoji} ${esc(currentEnv().name)}</span></h2>
     <p class="footnote" style="margin-bottom:10px">Hiermee berekent Grip je bufferadvies en bestedingsruimte.</p>
     <div class="list">
-      <div class="frow"><label>Netto inkomen p/m<div class="hint">leeg = uit je afschriften (${fmtEur(a.avgIncome)})</div></label>
-        <input type="number" id="sIncome" value="${s.incomeOverride ?? ""}" placeholder="${Math.round(a.avgIncome)}" step="50"></div>
+      <div class="frow"><label>Netto inkomen p/m<div class="hint">leeg = je vaste inkomen uit de afschriften (${fmtEur(a.incomeBase || a.avgIncome)})</div></label>
+        <input type="number" id="sIncome" value="${s.incomeOverride ?? ""}" placeholder="${Math.round(a.incomeBase || a.avgIncome)}" step="50"></div>
       <div class="frow"><label>Woonsituatie</label>
         <select id="sHousing"><option value="huur" ${s.housing === "huur" ? "selected" : ""}>Huurwoning</option><option value="koop" ${s.housing === "koop" ? "selected" : ""}>Koopwoning</option></select></div>
       <div class="frow" id="rowHomeValue" style="${s.housing === "koop" ? "" : "display:none"}"><label>Woningwaarde<div class="hint">voor onderhoudsreservering (1%/jaar)</div></label>
