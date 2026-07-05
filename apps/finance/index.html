@@ -1201,8 +1201,19 @@ function analytics() {
     for (const [c, v] of Object.entries(m.cats)) catAvg[c] = (catAvg[c] || 0) + v / avgWindow.length;
   }
 
+  // interne overboekingen per maand: geen inkomen/uitgave, maar wel van invloed op saldi
+  const transfersByMonth = new Map();
+  for (const t of enriched) {
+    if (t.type !== "transfer") continue;
+    const mk = monthKey(t.date);
+    if (!transfersByMonth.has(mk)) transfersByMonth.set(mk, { in: 0, out: 0, items: [] });
+    const tr = transfersByMonth.get(mk);
+    if (t.amount > 0) tr.in += t.amount; else tr.out += -t.amount;
+    tr.items.push(t);
+  }
+
   const income = state.settings.incomeOverride ?? (incomeBase || avgIncome);
-  cache = { enriched, byMonth, months, avgWindow, avgIncome, avgExpense, avgSaving, fixed, fixedExcluded, fixedTotal, fixedKeys, regelingen, catAvg, income, incomeBase, extraByMonth, salary, structuralIncome, incomeFixed, ownIbans };
+  cache = { enriched, byMonth, months, avgWindow, avgIncome, avgExpense, avgSaving, fixed, fixedExcluded, fixedTotal, fixedKeys, regelingen, catAvg, income, incomeBase, extraByMonth, transfersByMonth, salary, structuralIncome, incomeFixed, ownIbans };
   return cache;
 }
 
@@ -1836,6 +1847,27 @@ function renderOverzicht() {
         <div class="row">
           <div class="grow"><div class="t">${fullMonth(mk2)}</div><div class="d">${esc(names)}${e.items.length > 2 ? ` +${e.items.length - 2} meer` : ""}</div></div>
           <div class="amt pos">+${fmtEur(e.total)}</div>
+        </div>`;
+      }).join("")}
+    </div>`;
+    })() : ""}
+
+    ${a.transfersByMonth && a.transfersByMonth.size ? (() => {
+      const mks3 = [...a.transfersByMonth.keys()].sort().reverse().slice(0, 6);
+      return `
+    <h2 class="sec">Interne overboekingen</h2>
+    <p class="footnote" style="margin:-4px 4px 10px">Geschuif tussen je eigen rekeningen — geen inkomen of uitgave, maar wel van invloed op je saldi. Positief = er kwam netto geld naar deze rekening.</p>
+    <div class="list">
+      ${mks3.map(mk3 => {
+        const tr = a.transfersByMonth.get(mk3);
+        const net = tr.in - tr.out;
+        const names = [...new Set(tr.items.map(t => cap(t.name).slice(0, 20)))].slice(0, 2).join(", ");
+        return `
+        <div class="row">
+          <div class="emoji">🔁</div>
+          <div class="grow"><div class="t">${fullMonth(mk3)}</div>
+            <div class="d">in ${fmtEur(tr.in)} · uit ${fmtEur(tr.out)} · ${esc(names)}${tr.items.length > 2 ? " …" : ""}</div></div>
+          <div class="amt ${net < 0 ? "" : "pos"}">${net >= 0 ? "+" : ""}${fmtEur(net)}</div>
         </div>`;
       }).join("")}
     </div>`;
